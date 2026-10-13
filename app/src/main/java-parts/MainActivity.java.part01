@@ -1,0 +1,309 @@
+package com.nealaringale.superme;
+
+import android.Manifest;
+import android.app.Activity;
+import android.app.AlarmManager;
+import android.app.AlertDialog;
+import android.app.PendingIntent;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.MediaStore;
+import android.text.InputType;
+import android.view.Gravity;
+import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.HorizontalScrollView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import androidx.annotation.NonNull;
+
+import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.label.ImageLabel;
+import com.google.mlkit.vision.label.ImageLabeling;
+import com.google.mlkit.vision.label.defaults.ImageLabelerOptions;
+import com.google.zxing.integration.android.IntentIntegrator;
+import com.google.zxing.integration.android.IntentResult;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+/**
+ * Super Me: an original, local-first combination of study/productivity tools and fasting/nutrition tracking.
+ * It reimplements comparable functionality instead of merging third-party APK binaries or shipping their code/assets.
+ */
+public class MainActivity extends Activity {
+    private static final int BG = Color.rgb(13, 19, 24);
+    private static final int SURFACE = Color.rgb(22, 31, 38);
+    private static final int SURFACE_2 = Color.rgb(31, 43, 50);
+    private static final int TEXT = Color.rgb(242, 247, 246);
+    private static final int MUTED = Color.rgb(153, 173, 177);
+    private static final int GREEN = Color.rgb(113, 235, 179);
+    private static final int CYAN = Color.rgb(119, 218, 232);
+    private static final int ORANGE = Color.rgb(255, 190, 112);
+    private static final int RED = Color.rgb(255, 126, 130);
+    private static final String PREFS = "super_me_local_v2";
+    private static final long HOUR_MS = 60L * 60L * 1000L;
+    private static final long MINUTE_MS = 60L * 1000L;
+    private static final int REQ_NOTIFICATIONS = 810;
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final ExecutorService background = Executors.newSingleThreadExecutor();
+    private SharedPreferences prefs;
+
+    private LinearLayout shell;
+    private LinearLayout contentHost;
+    private LinearLayout navBar;
+    private ScrollView currentScroll;
+    private String tab = "HOME";
+    private String studyScreen = "menu";
+    private String healthScreen = "menu";
+    private String selectedProjectId = "";
+    private String selectedFlashcardId = "";
+    private String foodReturnScreen = "food";
+    private int clockThemeIndex = 0;
+
+    private JSONArray projects = new JSONArray();
+    private JSONArray notes = new JSONArray();
+    private JSONArray flashcards = new JSONArray();
+    private JSONArray sessions = new JSONArray();
+    private JSONArray meals = new JSONArray();
+    private JSONArray weights = new JSONArray();
+    private JSONArray waterRecords = new JSONArray();
+    private JSONArray fastHistory = new JSONArray();
+    private JSONArray challengeRecords = new JSONArray();
+
+    // Pomodoro state. Deadlines are epoch milliseconds so a paused/reopened app can recover the timer.
+    private String pomodoroMode = "FOCUS";
+    private long pomodoroDurationMs = 25 * MINUTE_MS;
+    private long pomodoroRemainingMs = 25 * MINUTE_MS;
+    private long pomodoroEndsAtMs = 0L;
+    private long focusSessionStartedAtMs = 0L;
+    private boolean pomodoroRunning = false;
+    private int focusCycles = 0;
+    private String currentFocusLabel = "Deep work";
+    private TextView pomodoroClockLabel;
+    private TextView pomodoroModeLabel;
+    private ProgressBar pomodoroProgress;
+
+    // Fasting state.
+    private long fastStartedAtMs = 0L;
+    private int fastingHours = 16;
+    private int waterGoalMl = 2200;
+    private double heightCm = 170.0;
+    private double goalWeightKg = 75.0;
+    private int dailyCaloriesGoal = 2000;
+    private boolean remindersEnabled = false;
+    private int eatingStartHour = 12;
+    private int eatingEndHour = 20;
+    private TextView fastCountdownLabel;
+    private TextView fastStatusLabel;
+    private ProgressBar fastProgressBar;
+    private TextView fastingTodaySummary;
+    private TextView waterTodaySummary;
+    private TextView caloriesTodaySummary;
+    private TextView weightSummary;
+    private TextView clockTimeLabel;
+
+    private final Runnable ticker = new Runnable() {
+        @Override public void run() {
+            rollDailyStateIfNeeded();
+            updateTimerLabels();
+            handler.postDelayed(this, 1000L);
+        }
+    };
+
+    @Override protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        Window window = getWindow();
+        window.setStatusBarColor(BG);
+        window.setNavigationBarColor(BG);
+        window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        loadState();
+        buildShell();
+        renderPage();
+        handler.post(ticker);
+    }
+
+    @Override protected void onDestroy() {
+        handler.removeCallbacks(ticker);
+        background.shutdown();
+        super.onDestroy();
+    }
+
+    private void buildShell() {
+        shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setBackgroundColor(BG);
+        contentHost = new LinearLayout(this);
+        contentHost.setOrientation(LinearLayout.VERTICAL);
+        shell.addView(contentHost, new LinearLayout.LayoutParams(-1, 0, 1f));
+        navBar = new LinearLayout(this);
+        navBar.setOrientation(LinearLayout.HORIZONTAL);
+        navBar.setGravity(Gravity.CENTER);
+        navBar.setPadding(dp(5), dp(8), dp(5), dp(8));
+        navBar.setBackgroundColor(0xFF111A20);
+        shell.addView(navBar, new LinearLayout.LayoutParams(-1, dp(70)));
+        setContentView(shell);
+        renderNav();
+    }
+
+    private void renderNav() {
+        if (navBar == null) return;
+        navBar.removeAllViews();
+        String[][] items = {{"HOME", "⌂", "Home"}, {"STUDY", "▤", "Study"}, {"FAST", "◷", "Fast"}, {"HEALTH", "♡", "Health"}, {"MORE", "•••", "More"}};
+        for (String[] item : items) {
+            boolean selected = tab.equals(item[0]);
+            LinearLayout col = new LinearLayout(this);
+            col.setOrientation(LinearLayout.VERTICAL);
+            col.setGravity(Gravity.CENTER);
+            col.setPadding(dp(2), dp(2), dp(2), dp(2));
+            TextView icon = text(item[1], 22, selected ? GREEN : MUTED, true);
+            icon.setGravity(Gravity.CENTER);
+            TextView label = text(item[2], 10, selected ? GREEN : MUTED, selected);
+            label.setGravity(Gravity.CENTER);
+            col.addView(icon);
+            col.addView(label, margin(0, 1, 0, 0));
+            col.setOnClickListener(v -> {
+                tab = item[0];
+                renderNav();
+                renderPage();
+            });
+            navBar.addView(col, new LinearLayout.LayoutParams(0, -1, 1f));
+        }
+    }
+
+    private void renderPage() {
+        contentHost.removeAllViews();
+        pomodoroClockLabel = null;
+        pomodoroModeLabel = null;
+        pomodoroProgress = null;
+        fastCountdownLabel = null;
+        fastStatusLabel = null;
+        fastProgressBar = null;
+        fastingTodaySummary = null;
+        waterTodaySummary = null;
+        caloriesTodaySummary = null;
+        weightSummary = null;
+        clockTimeLabel = null;
+
+        LinearLayout page = vertical();
+        page.setPadding(dp(18), dp(15), dp(18), dp(24));
+        switch (tab) {
+            case "STUDY": renderStudy(page); break;
+            case "FAST": renderFast(page); break;
+            case "HEALTH": renderHealth(page); break;
+            case "MORE": renderMore(page); break;
+            default: renderHome(page); break;
+        }
+        currentScroll = new ScrollView(this);
+        currentScroll.setFillViewport(true);
+        currentScroll.setClipToPadding(false);
+        currentScroll.addView(page);
+        contentHost.addView(currentScroll, new LinearLayout.LayoutParams(-1, -1));
+        updateTimerLabels();
+    }
+
+    private void renderHome(LinearLayout page) {
+        addBrand(page);
+        page.addView(text("YOUR DAY, WITH INTENTION", 11, MUTED, true), margin(0, 15, 0, 8));
+        page.addView(text(greeting() + ".", 29, TEXT, true), margin(0, 0, 0, 5));
+        page.addView(text("Make progress in what you learn and how you feel.", 14, MUTED, false), margin(0, 0, 0, 17));
+
+        LinearLayout hero = card();
+        hero.setBackground(roundRect(0xFF17332E, dp(23)));
+        hero.addView(text("SUPER ME", 11, GREEN, true), margin(0, 0, 0, 8));
+        hero.addView(text("One place for focus, fasting and feeling better.", 23, TEXT, true), margin(0, 0, 0, 9));
+        hero.addView(text("Local-first tools to help you build consistency, one day at a time.", 13, 0xFFD0DFDB, false), margin(0, 0, 0, 15));
+        hero.addView(actionButton("Open my daily dashboard", GREEN, BG, () -> { tab = "STUDY"; studyScreen = "menu"; renderNav(); renderPage(); }));
+        page.addView(hero, margin(0, 0, 0, 14));
+
+        LinearLayout stats = row();
+        stats.addView(statCard("STUDY TODAY", studySecondsTodayText(), "tracked time", CYAN), weighted(1, 0, 7, 0, 0));
+        stats.addView(statCard("WATER", waterMlToday() + " ml", "of " + waterGoalMl + " ml", BLUE()), weighted(1, 7, 0, 0, 0));
+        page.addView(stats, margin(0, 0, 0, 10));
+        LinearLayout stats2 = row();
+        stats2.addView(statCard("FASTING", fastStartedAtMs == 0 ? "Ready" : fastingHours + " h goal", fastStartedAtMs == 0 ? "choose a plan" : "in progress", ORANGE), weighted(1, 0, 7, 0, 0));
+        stats2.addView(statCard("HABITS / TASKS", completedTodayTasks() + " done", "study checklist", GREEN), weighted(1, 7, 0, 0, 0));
+        page.addView(stats2, margin(0, 0, 0, 18));
+
+        page.addView(sectionTitle("Pick up where you left off", "Quick access to your everyday tools."), margin(0, 0, 0, 10));
+        addModuleCard(page, "Study workspace", "Projects, syllabus topics, Pomodoro, flashcards and notes.", "Open Study →", CYAN, () -> { tab = "STUDY"; studyScreen = "menu"; renderNav(); renderPage(); });
+        addModuleCard(page, "Fasting clock", fastStartedAtMs == 0 ? "Pick a plan and start your first fast." : "Your fasting timer is running. Check your progress.", "Open Fasting →", ORANGE, () -> { tab = "FAST"; renderNav(); renderPage(); });
+        addModuleCard(page, "Nutrition & body", "Meals, calories, water, body measurements and recipes.", "Open Health →", GREEN, () -> { tab = "HEALTH"; healthScreen = "menu"; renderNav(); renderPage(); });
+
+        page.addView(sectionTitle("A little reminder", "Progress beats perfection."), margin(0, 4, 0, 8));
+        page.addView(text("Use fasting as a tracking tool, not a test of willpower. Choose a routine that is suitable for you, stay hydrated, and stop if you feel unwell.", 13, MUTED, false), margin(0, 0, 0, 3));
+    }
+
+    private void addBrand(LinearLayout page) {
+        LinearLayout brand = row();
+        brand.setGravity(Gravity.CENTER_VERTICAL);
+        TextView logo = text("SM", 15, GREEN, true);
+        logo.setGravity(Gravity.CENTER);
+        logo.setBackground(roundRect(SURFACE_2, dp(13)));
+        brand.addView(logo, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        LinearLayout labels = vertical();
+        labels.setPadding(dp(10), 0, 0, 0);
+        labels.addView(text("SUPER ME", 15, TEXT, true));
+        labels.addView(text("YOUR PERSONAL PROGRESS SPACE", 9, MUTED, true), margin(0, 2, 0, 0));
+        brand.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
+        Button settings = button("⚙", SURFACE_2, MUTED, 17);
+        settings.setOnClickListener(v -> { tab = "MORE"; renderNav(); renderPage(); });
+        brand.addView(settings, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        page.addView(brand);
+    }
+
+    private void renderStudy(LinearLayout page) {
+        if ("projects".equals(studyScreen)) { renderProjects(page); return; }
+        if ("project-detail".equals(studyScreen)) { renderProjectDetail(page); return; }
+        if ("pomodoro".equals(studyScreen)) { renderPomodoro(page); return; }
+        if ("flashcards".equals(studyScreen)) { renderFlashcards(page); return; }
+        if ("notes".equals(studyScreen)) { renderNotes(page); return; }
+        if ("clock".equals(studyScreen)) { renderFlipClock(page); return; }
+        if ("templates".equals(studyScreen)) { renderTemplates(page); return; }
+        if ("progress".equals(studyScreen)) { renderStudyProgress(page); return; }
+
+        addPageHeader(page, "Study & projects", "Track the work, not just the hours.", null);
+        LinearLayout spotlight = card();
+        spotlight.addView(text("FOCUS SESSION", 10, CYAN, true), margin(0, 0, 0, 7));
+        spotlight.addView(text(pomodoroRunning ? "Timer is running" : "Ready for a focused session?", 21, TEXT, true), margin(0, 0, 0, 6));
+        spotlight.addView(text("25 minutes of focus. A short break. Repeat with intention.", 13, MUTED, false), margin(0, 0, 0, 12));
+        spotlight.addView(actionButton(pomodoroRunning ? "Return to timer" : "Start Pomodoro", GREEN, BG, () -> { studyScreen = "pomodoro"; renderPage(); }));
+        page.addView(spotlight, margin(0, 0, 0, 14));
+
