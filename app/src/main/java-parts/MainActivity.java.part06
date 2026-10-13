@@ -1,0 +1,176 @@
+        page.addView(text("Nutrition values can be inaccurate or incomplete. Do not use this diary as a substitute for clinical nutrition advice.", 11, MUTED, false), margin(0, 7, 0, 0));
+    }
+
+    private void renderRecipes(LinearLayout page) {
+        addPageHeader(page, "Recipes", "Simple ideas with approximate nutrition values.", () -> { healthScreen = "menu"; renderPage(); });
+        page.addView(text("Starter recipes are examples, not a personalised meal plan. Serving sizes and ingredients change nutritional values.", 12, MUTED, false), margin(0, 0, 0, 12));
+        String[][] recipes = {
+                {"Greek yogurt bowl", "Breakfast", "250", "18", "28", "6", "Greek yogurt, berries and oats"},
+                {"Egg and toast plate", "Breakfast", "330", "19", "32", "14", "Two eggs, wholegrain toast and tomato"},
+                {"Oats with banana", "Breakfast", "360", "11", "66", "7", "Oats, banana, milk or unsweetened alternative"},
+                {"Chickpea salad", "Lunch", "410", "16", "55", "13", "Chickpeas, cucumber, tomato and lemon dressing"},
+                {"Chicken rice bowl", "Lunch", "520", "38", "62", "11", "Chicken, rice and mixed vegetables"},
+                {"Tofu veggie stir-fry", "Dinner", "430", "24", "39", "19", "Tofu, vegetables and a modest portion of rice"},
+                {"Dal and roti", "Dinner", "480", "20", "72", "11", "Dal, whole-wheat roti and vegetables"},
+                {"Peanut banana snack", "Snack", "220", "7", "28", "11", "Banana with a measured spoon of peanut butter"},
+                {"Fruit and nuts", "Snack", "200", "5", "25", "10", "Seasonal fruit and a small handful of nuts"},
+                {"Paneer veggie wrap", "Lunch", "490", "25", "48", "21", "Paneer, whole-wheat wrap and vegetables"}
+        };
+        for (String[] recipe : recipes) {
+            LinearLayout box = card();
+            box.addView(text(recipe[0], 16, TEXT, true), margin(0, 0, 0, 4));
+            box.addView(text(recipe[1] + " · about " + recipe[2] + " kcal · P " + recipe[3] + "g · C " + recipe[4] + "g · F " + recipe[5] + "g", 11, GREEN, true), margin(0, 0, 0, 6));
+            box.addView(text(recipe[6], 12, MUTED, false), margin(0, 0, 0, 10));
+            box.addView(actionButton("Add to today's diary", GREEN, BG, () -> addRecipeMeal(recipe)));
+            page.addView(box, margin(0, 0, 0, 9));
+        }
+    }
+
+    private void renderMealPlan(LinearLayout page) {
+        addPageHeader(page, "Meal planner", "Plan a simple day around your eating window.", () -> { healthScreen = "menu"; renderPage(); });
+        LinearLayout window = card();
+        window.addView(text("YOUR EATING WINDOW", 10, ORANGE, true), margin(0, 0, 0, 6));
+        window.addView(text(formatClock(eatingStartHour, 0) + " – " + formatClock(eatingEndHour, 0), 24, TEXT, true), margin(0, 0, 0, 5));
+        window.addView(text("This is a planning guide only. You can change the window on the fasting screen.", 12, MUTED, false));
+        page.addView(window, margin(0, 0, 0, 12));
+        String[][] slots = {{"Breakfast", "First meal", "Choose a protein source, fibre-rich carbohydrate and fruit or vegetables."}, {"Lunch", "Main meal", "Include vegetables, protein and an energy source that suits you."}, {"Snack", "Optional snack", "Use hunger and your needs to decide whether a snack fits."}, {"Dinner", "Last meal", "Plan a satisfying meal before your chosen fasting window."}};
+        for (String[] slot : slots) {
+            LinearLayout box = card();
+            box.addView(text(slot[0], 16, TEXT, true), margin(0, 0, 0, 3));
+            box.addView(text(slot[1], 10, CYAN, true), margin(0, 0, 0, 5));
+            box.addView(text(slot[2], 12, MUTED, false), margin(0, 0, 0, 10));
+            box.addView(actionButton("Log " + slot[0].toLowerCase(Locale.ROOT), SURFACE_2, TEXT, () -> showMealDialog(slot[0], null)));
+            page.addView(box, margin(0, 0, 0, 9));
+        }
+        page.addView(actionButton("Open recipe ideas", GREEN, BG, () -> { healthScreen = "recipes"; renderPage(); }));
+    }
+
+    private void renderInsights(LinearLayout page) {
+        addPageHeader(page, "Knowledge & insights", "Short reads for informed, sustainable routines.", () -> { healthScreen = "menu"; renderPage(); });
+        String[][] cards = {
+                {"Fasting is a schedule, not a score", "Longer fasting windows are not automatically better. Suitability depends on health, medicines, age, activity and personal circumstances."},
+                {"Build meals around nourishment", "A varied eating pattern can include protein foods, fibre-rich carbohydrates, vegetables, fruit and fats that fit your preferences."},
+                {"Hydration is individual", "Fluid needs vary with weather, exercise, body size, diet and health conditions. Thirst and clinical advice matter more than an app target."},
+                {"Track trends, not daily noise", "Weight, water and energy can fluctuate. Look at longer trends and do not treat one day's value as success or failure."},
+                {"Avoid all-or-nothing thinking", "A skipped workout or changed meal does not erase progress. Return to a sustainable routine rather than compensating aggressively."},
+                {"Know when not to fast", "Fasting may be unsafe during pregnancy, for people with a history of eating disorders, underweight people, and people with certain health conditions or medications. Seek qualified advice."},
+                {"Make study breaks real breaks", "Stand up, move gently, rest your eyes and return with a clear next task. Breaks are part of a focused schedule."},
+                {"Use flashcards actively", "Try recalling the answer before revealing it. Space reviews over time and make cards short enough to practise one idea at a time."}
+        };
+        for (String[] item : cards) {
+            LinearLayout box = card();
+            box.addView(text(item[0], 16, TEXT, true), margin(0, 0, 0, 6));
+            box.addView(text(item[1], 12, MUTED, false));
+            page.addView(box, margin(0, 0, 0, 9));
+        }
+    }
+
+    private void renderChallenges(LinearLayout page) {
+        addPageHeader(page, "Challenges", "Small goals you can complete and review yourself.", () -> { healthScreen = "menu"; renderPage(); });
+        String[][] challenges = {
+                {"7-day hydration check-in", "Log at least one drink each day for seven days."},
+                {"5 focused study sessions", "Complete five focus sessions; they need not be on consecutive days."},
+                {"3 mindful meal logs", "Record three meals to learn your own patterns."},
+                {"3 fasting entries", "Record three fasting windows only if fasting is suitable for you."},
+                {"Weekly body-data check-in", "Log a measurement if tracking weight is appropriate and comfortable for you."},
+                {"Write 5 learning notes", "Create five short notes for concepts you want to remember."}
+        };
+        for (String[] challenge : challenges) {
+            String key = "challenge_" + challenge[0];
+            boolean done = prefs.getBoolean(key, false);
+            LinearLayout box = card();
+            box.addView(text(challenge[0], 15, done ? GREEN : TEXT, true), margin(0, 0, 0, 5));
+            box.addView(text(challenge[1], 12, MUTED, false), margin(0, 0, 0, 10));
+            box.addView(actionButton(done ? "Completed ✓" : "Mark complete", done ? GREEN : SURFACE_2, done ? BG : TEXT, () -> {
+                prefs.edit().putBoolean(key, !done).apply();
+                if (!done) { JSONObject r = new JSONObject(); put(r, "id", id()); put(r, "name", challenge[0]); put(r, "time", System.currentTimeMillis()); challengeRecords.put(r); saveState(); }
+                renderPage();
+            }));
+            page.addView(box, margin(0, 0, 0, 8));
+        }
+        page.addView(text("These are self-managed check-ins, not clinically validated health challenges. The app does not monitor your body or verify health outcomes.", 11, MUTED, false), margin(0, 6, 0, 0));
+    }
+
+    private void renderAchievements(LinearLayout page) {
+        addPageHeader(page, "Achievements", "Milestones calculated from your local records.", () -> { healthScreen = "menu"; renderPage(); });
+        int completedTasks = completedTodayTasks();
+        long studyTime = 0;
+        for (int i = 0; i < sessions.length(); i++) { JSONObject s = sessions.optJSONObject(i); if (s != null) studyTime += s.optLong("seconds", 0L); }
+        String[][] awards = {
+                {"First focus block", sessions.length() >= 1 ? "Unlocked" : "Not yet", "Complete or manually log your first study session.", sessions.length() >= 1 ? "UNLOCKED" : "LOCKED"},
+                {"Consistent learner", studyTime >= 5 * 3600L ? "Unlocked" : "Not yet", "Log five hours of focus time.", studyTime >= 5 * 3600L ? "UNLOCKED" : "LOCKED"},
+                {"Topic finisher", hasAnyCompletedTask() ? "Unlocked" : "Not yet", "Complete a project topic.", hasAnyCompletedTask() ? "UNLOCKED" : "LOCKED"},
+                {"Hydration starter", waterRecords.length() > 0 ? "Unlocked" : "Not yet", "Log your first drink.", waterRecords.length() > 0 ? "UNLOCKED" : "LOCKED"},
+                {"Fast recorded", fastHistory.length() > 0 ? "Unlocked" : "Not yet", "Finish a fasting timer.", fastHistory.length() > 0 ? "UNLOCKED" : "LOCKED"},
+                {"Food diary started", meals.length() > 0 ? "Unlocked" : "Not yet", "Log your first meal.", meals.length() > 0 ? "UNLOCKED" : "LOCKED"},
+                {"Flashcard builder", flashcards.length() >= 10 ? "Unlocked" : "Not yet", "Create ten flashcards.", flashcards.length() >= 10 ? "UNLOCKED" : "LOCKED"},
+                {"Daily momentum", completedTasks >= 3 ? "Unlocked" : "Not yet", "Complete three tasks today.", completedTasks >= 3 ? "UNLOCKED" : "LOCKED"}
+        };
+        for (String[] award : awards) {
+            LinearLayout box = card();
+            LinearLayout row = row();
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            TextView icon = text("✦", 24, "UNLOCKED".equals(award[3]) ? ORANGE : MUTED, true);
+            icon.setGravity(Gravity.CENTER);
+            row.addView(icon, new LinearLayout.LayoutParams(dp(42), dp(42)));
+            LinearLayout labels = vertical(); labels.setPadding(dp(10), 0, 0, 0);
+            labels.addView(text(award[0], 15, TEXT, true));
+            labels.addView(text(award[2], 11, MUTED, false), margin(0, 3, 0, 0));
+            row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1));
+            box.addView(row);
+            box.addView(text(award[3], 9, "UNLOCKED".equals(award[3]) ? GREEN : MUTED, true), margin(dp(52), 8, 0, 0));
+            page.addView(box, margin(0, 0, 0, 8));
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Dialogs and actions for study/project functionality.
+    // ---------------------------------------------------------------------
+
+    private void showProjectDialog() {
+        LinearLayout form = formLayout();
+        EditText name = field("", "Project or syllabus name", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        EditText kind = field("Study", "Type (Study / Exam / Coding / Project)", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        form.addView(name); form.addView(kind);
+        new AlertDialog.Builder(this).setTitle("Create project").setMessage("Make a top-level project, then add chapters, topics or tasks.")
+                .setView(form).setNegativeButton("Cancel", null).setPositiveButton("Create", (d, w) -> {
+                    String n = name.getText().toString().trim();
+                    if (n.isEmpty()) { toast("Enter a project name."); return; }
+                    JSONObject p = new JSONObject(); put(p, "id", id()); put(p, "name", n);
+                    put(p, "kind", kind.getText().toString().trim().isEmpty() ? "Study" : kind.getText().toString().trim());
+                    put(p, "created", System.currentTimeMillis()); put(p, "items", new JSONArray());
+                    projects.put(p); selectedProjectId = p.optString("id"); saveState(); studyScreen = "project-detail"; renderPage();
+                }).show();
+    }
+
+    private void importTemplate(String[] template) {
+        JSONObject p = new JSONObject();
+        String pid = id(); put(p, "id", pid); put(p, "name", template[0]); put(p, "kind", template[1]); put(p, "created", System.currentTimeMillis());
+        JSONArray items = new JSONArray();
+        for (int i = 2; i < template.length; i++) {
+            JSONObject item = new JSONObject(); put(item, "id", id()); put(item, "title", template[i]); put(item, "done", false); put(item, "seconds", 0L); put(item, "completedAt", 0L); items.put(item);
+        }
+        put(p, "items", items); projects.put(p); saveState(); selectedProjectId = pid; studyScreen = "project-detail"; renderPage();
+        toast("Template imported. Add or edit topics as needed.");
+    }
+
+    private void showTaskDialog(JSONObject project) {
+        EditText title = edit("", "Topic, chapter or task name", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        new AlertDialog.Builder(this).setTitle("Add topic").setMessage("Use a short, actionable name.")
+                .setView(padded(title)).setNegativeButton("Cancel", null).setPositiveButton("Add", (d, w) -> {
+                    String name = title.getText().toString().trim();
+                    if (name.isEmpty()) { toast("Enter a topic name."); return; }
+                    JSONArray items = project.optJSONArray("items"); if (items == null) items = new JSONArray();
+                    JSONObject item = new JSONObject(); put(item, "id", id()); put(item, "title", name); put(item, "done", false); put(item, "seconds", 0L); put(item, "completedAt", 0L); items.put(item); put(project, "items", items);
+                    saveState(); renderPage();
+                }).show();
+    }
+
+    private void removeTask(JSONObject project, String taskId) {
+        JSONArray items = project.optJSONArray("items");
+        if (items == null) return;
+        put(project, "items", removeById(items, taskId)); saveState(); renderPage();
+    }
+
+    private void confirmDeleteProject(String id, String name) {
+        new AlertDialog.Builder(this).setTitle("Delete project?").setMessage("Delete “" + name + "” and its topic list?")
