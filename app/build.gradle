@@ -10,12 +10,46 @@ android {
         applicationId 'com.nealaringale.superme'
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName '1.0.0'
+        versionCode 2
+        versionName '1.1.0'
     }
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+dependencies {
+    implementation 'androidx.annotation:annotation:1.9.1'
+    implementation 'androidx.core:core:1.15.0'
+    implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
+    implementation 'com.google.mlkit:image-labeling:17.0.9'
+}
+
+// MainActivity is split into ordered text parts so it can be committed through the
+// GitHub Contents API. This task reconstructs the ordinary source file before javac.
+def generatedSuperMeSource = layout.buildDirectory.file('generated/superme/com/nealaringale/superme/MainActivity.java')
+android.sourceSets.main.java.srcDir(layout.buildDirectory.dir('generated/superme'))
+
+tasks.register('generateMainActivity') {
+    def partsDir = file('src/main/java-parts')
+    inputs.files(fileTree(partsDir) { include 'MainActivity.java.part*' })
+    outputs.file(generatedSuperMeSource)
+    doLast {
+        def output = generatedSuperMeSource.get().asFile
+        output.parentFile.mkdirs()
+        def parts = fileTree(partsDir).matching { include 'MainActivity.java.part*' }.files.sort { it.name }
+        if (parts.size() != 10) {
+            throw new GradleException("Expected 10 MainActivity source parts, found ${parts.size()}")
+        }
+        output.withWriter('UTF-8') { writer ->
+            parts.each { writer << it.getText('UTF-8') }
+        }
+    }
+}
+
+tasks.named('preBuild').configure { dependsOn('generateMainActivity') }
+tasks.configureEach { task ->
+    if (task.name.contains('JavaWithJavac')) task.dependsOn('generateMainActivity')
 }
