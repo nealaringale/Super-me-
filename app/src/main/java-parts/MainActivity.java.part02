@@ -1,0 +1,183 @@
+        page.addView(sectionTitle("Your toolkit", "Build a complete learning workflow."), margin(0, 0, 0, 10));
+        addModuleCard(page, "Projects & syllabus", "Organise projects into subjects, chapters, topics and tasks.", "Open projects →", CYAN, () -> openStudy("projects"));
+        addModuleCard(page, "Pomodoro & time tracking", "Focus and break cycles, timed sessions and daily totals.", "Open timer →", GREEN, () -> openStudy("pomodoro"));
+        addModuleCard(page, "Flashcards", "Review questions with spaced-repetition scheduling.", "Review cards →", ORANGE, () -> openStudy("flashcards"));
+        addModuleCard(page, "Notes", "Keep quick notes alongside your study projects.", "Open notes →", CYAN, () -> openStudy("notes"));
+        addModuleCard(page, "Flip clock", "A simple distraction-light clock for your desk.", "Open clock →", GREEN, () -> openStudy("clock"));
+        addModuleCard(page, "Template library", "Start with study and coding roadmaps, then customise.", "Browse templates →", ORANGE, () -> openStudy("templates"));
+        addModuleCard(page, "Study progress & streaks", "Review logged time, completed tasks and weekly consistency.", "View progress →", CYAN, () -> openStudy("progress"));
+    }
+
+    private void renderFast(LinearLayout page) {
+        if ("history".equals(healthScreen)) { renderFastingHistory(page); return; }
+        if ("stages".equals(healthScreen)) { renderFastingStages(page); return; }
+        if ("plans".equals(healthScreen)) { renderFastingPlans(page); return; }
+
+        addPageHeader(page, "Fasting", "Your fasting clock and weekly rhythm.", null);
+        LinearLayout hero = card();
+        hero.setBackground(roundRect(0xFF202F2A, dp(24)));
+        hero.addView(text(fastStartedAtMs == 0L ? "READY WHEN YOU ARE" : "YOU'RE FASTING", 11, ORANGE, true), margin(0, 0, 0, 8));
+        fastCountdownLabel = text("00:00:00", 35, TEXT, true);
+        fastCountdownLabel.setGravity(Gravity.CENTER);
+        hero.addView(fastCountdownLabel, margin(0, 4, 0, 6));
+        fastStatusLabel = text("Choose a plan to start a fasting window.", 13, 0xFFD0DCD7, false);
+        fastStatusLabel.setGravity(Gravity.CENTER);
+        hero.addView(fastStatusLabel, margin(0, 0, 0, 13));
+        fastProgressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        fastProgressBar.setMax(1000);
+        fastProgressBar.setProgressTintList(android.content.res.ColorStateList.valueOf(ORANGE));
+        fastProgressBar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF40504B));
+        hero.addView(fastProgressBar, margin(0, 0, 0, 14));
+        LinearLayout fastActions = row();
+        fastActions.addView(actionButton(fastStartedAtMs == 0L ? "Start fast" : "End fast", ORANGE, BG, () -> toggleFast()), weighted(1, 0, 5, 0, 0));
+        Button change = button("Change plan", SURFACE_2, TEXT, 12);
+        change.setOnClickListener(v -> { healthScreen = "plans"; renderPage(); });
+        fastActions.addView(change, weighted(1, 5, 0, 0, 0));
+        hero.addView(fastActions);
+        page.addView(hero, margin(0, 0, 0, 14));
+
+        LinearLayout plan = card();
+        plan.addView(sectionTitle("Your plan", fastingHours + ":" + (24 - fastingHours) + " fasting/eating split"), margin(0, 0, 0, 9));
+        plan.addView(text("Daily eating window: " + formatClock(eatingStartHour, 0) + " – " + formatClock(eatingEndHour, 0), 14, TEXT, true), margin(0, 0, 0, 4));
+        plan.addView(text("A timer supports your routine; it does not assess whether fasting is medically suitable for you.", 12, MUTED, false), margin(0, 0, 0, 11));
+        Button schedule = button("Customise eating window", SURFACE_2, TEXT, 12);
+        schedule.setOnClickListener(v -> showEatingWindowDialog());
+        plan.addView(schedule, new LinearLayout.LayoutParams(-1, dp(43)));
+        page.addView(plan, margin(0, 0, 0, 14));
+
+        page.addView(sectionTitle("Fasting insights", "See how your routine is adding up."), margin(0, 0, 0, 9));
+        LinearLayout summary = row();
+        summary.addView(statCard("COMPLETED FASTS", Integer.toString(fastHistory.length()), "in your history", ORANGE), weighted(1, 0, 6, 0, 0));
+        summary.addView(statCard("CURRENT TARGET", fastingHours + " hours", "" + (24 - fastingHours) + "h eating window", GREEN), weighted(1, 6, 0, 0, 0));
+        page.addView(summary, margin(0, 0, 0, 14));
+        addModuleCard(page, "Weekly plan & fasting options", "12:12 through 23:1, plus a custom duration.", "Choose a plan →", ORANGE, () -> { healthScreen = "plans"; renderPage(); });
+        addModuleCard(page, "Fasting history", "Review start/end times and past fasting windows.", "View history →", CYAN, () -> { healthScreen = "history"; renderPage(); });
+        addModuleCard(page, "Fasting stages & learning", "General educational notes about the fast; responses vary.", "Learn more →", GREEN, () -> { healthScreen = "stages"; renderPage(); });
+        addModuleCard(page, "Reminders", remindersEnabled ? "Local reminders are enabled." : "Optional local reminders for your timer.", remindersEnabled ? "Manage reminders →" : "Enable reminders →", CYAN, () -> toggleReminders());
+    }
+
+    private void renderHealth(LinearLayout page) {
+        if ("weight".equals(healthScreen)) { renderWeight(page); return; }
+        if ("water".equals(healthScreen)) { renderWater(page); return; }
+        if ("food".equals(healthScreen)) { renderFood(page); return; }
+        if ("recipes".equals(healthScreen)) { renderRecipes(page); return; }
+        if ("mealplan".equals(healthScreen)) { renderMealPlan(page); return; }
+        if ("insights".equals(healthScreen)) { renderInsights(page); return; }
+        if ("challenges".equals(healthScreen)) { renderChallenges(page); return; }
+        if ("achievements".equals(healthScreen)) { renderAchievements(page); return; }
+        addPageHeader(page, "Health & nutrition", "Fasting is one part of a bigger picture.", null);
+        LinearLayout overview = card();
+        overview.addView(text("TODAY AT A GLANCE", 10, GREEN, true), margin(0, 0, 0, 8));
+        overview.addView(text(waterMlToday() + " ml water · " + caloriesToday() + " kcal logged", 19, TEXT, true), margin(0, 0, 0, 5));
+        overview.addView(text("Daily targets are personal estimates. Use professional advice for medical or nutrition decisions.", 12, MUTED, false), margin(0, 0, 0, 12));
+        LinearLayout buttons = row();
+        buttons.addView(actionButton("+ Water", CYAN, BG, () -> addWater(250)), weighted(1, 0, 5, 0, 0));
+        buttons.addView(actionButton("+ Food", GREEN, BG, () -> showMealDialog("Snack", null)), weighted(1, 5, 0, 0, 0));
+        overview.addView(buttons);
+        page.addView(overview, margin(0, 0, 0, 14));
+
+        page.addView(sectionTitle("Track your basics", "Every measurement is optional."), margin(0, 0, 0, 10));
+        addModuleCard(page, "Weight & body measurements", "Log weight, waist measurement, height and a weight goal.", "Open body tracker →", GREEN, () -> openHealth("weight"));
+        addModuleCard(page, "Water tracker", "Set a daily goal and log drinks in one tap.", "Track hydration →", CYAN, () -> openHealth("water"));
+        addModuleCard(page, "Food diary & calories", "Log meals, calories and macros. Scan barcodes or use photo-assisted entry.", "Open food diary →", ORANGE, () -> openHealth("food"));
+        addModuleCard(page, "Recipes", "Browse starter recipes with approximate nutrition information.", "Browse recipes →", GREEN, () -> openHealth("recipes"));
+        addModuleCard(page, "Meal planner", "Plan breakfast, lunch, snacks and dinner around your day.", "Plan meals →", CYAN, () -> openHealth("mealplan"));
+        addModuleCard(page, "Knowledge & insights", "Short learning cards about fasting, hydration and balanced habits.", "Read insights →", ORANGE, () -> openHealth("insights"));
+        addModuleCard(page, "Challenges", "Set your own small goals and track them day by day.", "View challenges →", GREEN, () -> openHealth("challenges"));
+        addModuleCard(page, "Achievements", "Milestones earned from your local activity.", "View trophies →", ORANGE, () -> openHealth("achievements"));
+    }
+
+    private void renderMore(LinearLayout page) {
+        addPageHeader(page, "More tools", "Customise and manage Super Me.", null);
+        addModuleCard(page, "Profile & goals", "Set height, weight goal, calorie target and water goal.", "Open settings →", GREEN, () -> showProfileDialog());
+        addModuleCard(page, "Reminders & notifications", remindersEnabled ? "Local fast reminders enabled." : "Keep optional fast reminders on your device.", remindersEnabled ? "Turn off reminders →" : "Turn on reminders →", CYAN, () -> toggleReminders());
+        addModuleCard(page, "Export my data", "Create a JSON backup of your projects, notes, meals and logs.", "Share export →", ORANGE, () -> exportData());
+        addModuleCard(page, "Import a backup", "Restore a JSON export created by Super Me.", "Choose backup file →", CYAN, () -> importData());
+        addModuleCard(page, "About Super Me", "One original Android app inspired by two different productivity and fasting toolkits.", "View feature list →", GREEN, () -> showAboutDialog());
+        page.addView(sectionTitle("Privacy-first defaults", "Your records are stored on your phone."), margin(0, 5, 0, 8));
+        page.addView(text("Super Me does not have accounts or a cloud sync service in this build. Barcode lookup contacts Open Food Facts only when you explicitly scan a product. Photo labels are processed on-device by the ML Kit image-labeling API when its model is available; suggested labels are not nutrition advice.", 13, MUTED, false), margin(0, 0, 0, 10));
+        page.addView(text("Fasting, body metrics and nutrition estimates are informational tools, not medical care. If fasting may be unsafe for you, consult a qualified clinician before starting.", 12, MUTED, false));
+    }
+
+    private void addPageHeader(LinearLayout page, String title, String subtitle, Runnable back) {
+        LinearLayout top = row();
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        if (back != null) {
+            Button b = button("‹", SURFACE_2, TEXT, 25);
+            b.setOnClickListener(v -> back.run());
+            top.addView(b, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        }
+        LinearLayout labels = vertical();
+        labels.addView(text(title, 25, TEXT, true));
+        labels.addView(text(subtitle, 12, MUTED, false), margin(0, 4, 0, 0));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+        if (back != null) lp.leftMargin = dp(10);
+        top.addView(labels, lp);
+        page.addView(top, margin(0, 0, 0, 17));
+    }
+
+    private void addModuleCard(LinearLayout parent, String title, String subtitle, String action, int accent, Runnable click) {
+        LinearLayout box = card();
+        LinearLayout row = row();
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        View dot = new View(this);
+        dot.setBackground(roundRect(accent, dp(6)));
+        row.addView(dot, new LinearLayout.LayoutParams(dp(8), dp(42)));
+        LinearLayout labels = vertical();
+        labels.setPadding(dp(12), 0, dp(2), 0);
+        labels.addView(text(title, 16, TEXT, true));
+        labels.addView(text(subtitle, 12, MUTED, false), margin(0, 4, 0, 0));
+        row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
+        box.addView(row, margin(0, 0, 0, 11));
+        TextView link = text(action, 12, accent, true);
+        box.addView(link);
+        box.setOnClickListener(v -> click.run());
+        parent.addView(box, margin(0, 0, 0, 10));
+    }
+
+    private LinearLayout statCard(String label, String value, String caption, int accent) {
+        LinearLayout box = card();
+        box.setPadding(dp(13), dp(14), dp(13), dp(14));
+        box.addView(text(label, 9, MUTED, true), margin(0, 0, 0, 9));
+        box.addView(text(value, 20, accent, true), margin(0, 0, 0, 3));
+        box.addView(text(caption, 10, MUTED, false));
+        return box;
+    }
+
+    private LinearLayout sectionTitle(String title, String subtitle) {
+        LinearLayout block = vertical();
+        block.addView(text(title, 18, TEXT, true));
+        if (subtitle != null && !subtitle.isEmpty()) block.addView(text(subtitle, 12, MUTED, false), margin(0, 4, 0, 0));
+        return block;
+    }
+
+    private void openStudy(String screen) { studyScreen = screen; renderPage(); }
+    private void openHealth(String screen) { healthScreen = screen; renderPage(); }
+
+    // ---------------------------------------------------------------------
+    // TrackIt-inspired study workspace: project hierarchy, timer, cards, notes,
+    // templates, flip clock and local progress.
+    // ---------------------------------------------------------------------
+
+    private void renderProjects(LinearLayout page) {
+        addPageHeader(page, "Projects & syllabus", "Create a project, then break it into topics.", () -> { studyScreen = "menu"; renderPage(); });
+        Button add = actionButton("+ New project", GREEN, BG, () -> showProjectDialog());
+        page.addView(add, margin(0, 0, 0, 13));
+        page.addView(text("Your projects", 17, TEXT, true), margin(0, 0, 0, 9));
+        if (projects.length() == 0) {
+            emptyState(page, "No projects yet", "Start with a subject, exam syllabus or personal project.");
+        }
+        for (int i = 0; i < projects.length(); i++) {
+            JSONObject project = projects.optJSONObject(i);
+            if (project == null) continue;
+            JSONArray items = project.optJSONArray("items");
+            if (items == null) items = new JSONArray();
+            int done = 0;
+            for (int j = 0; j < items.length(); j++) if (items.optJSONObject(j) != null && items.optJSONObject(j).optBoolean("done")) done++;
+            final String id = project.optString("id");
+            LinearLayout box = card();
+            box.addView(text(project.optString("name", "Untitled project"), 17, TEXT, true), margin(0, 0, 0, 4));
+            box.addView(text(project.optString("kind", "Project") + "  ·  " + done + "/" + items.length() + " items complete", 12, MUTED, false), margin(0, 0, 0, 10));
+            ProgressBar progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+            progress.setMax(Math.max(1, items.length()));
+            progress.setProgress(done);
