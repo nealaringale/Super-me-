@@ -1,0 +1,206 @@
+        LinearLayout form = formLayout();
+        EditText start = field(Integer.toString(eatingStartHour), "Eating starts hour (0–23)", InputType.TYPE_CLASS_NUMBER);
+        EditText end = field(Integer.toString(eatingEndHour), "Eating ends hour (0–23)", InputType.TYPE_CLASS_NUMBER);
+        form.addView(start); form.addView(end);
+        new AlertDialog.Builder(this).setTitle("Daily eating window")
+                .setMessage("Use local 24-hour clock hours. This sets a reminder window; it does not automatically start or end a fast.")
+                .setView(form).setNegativeButton("Cancel", null).setPositiveButton("Save", (d, w) -> {
+                    int s, e;
+                    try { s = Integer.parseInt(start.getText().toString()); e = Integer.parseInt(end.getText().toString()); }
+                    catch (Exception ex) { toast("Use whole hours from 0 to 23."); return; }
+                    if (s < 0 || s > 23 || e < 0 || e > 23 || s == e) { toast("Choose different hours from 0 to 23."); return; }
+                    eatingStartHour = s; eatingEndHour = e;
+                    prefs.edit().putInt("eating_start_hour", s).putInt("eating_end_hour", e).apply();
+                    renderPage();
+                }).show();
+    }
+
+    private void toggleReminders() {
+        if (remindersEnabled) {
+            remindersEnabled = false;
+            prefs.edit().putBoolean("reminders_enabled", false).apply();
+            cancelReminder(1002); cancelReminder(1003);
+            toast("Local reminders are off."); renderPage(); return;
+        }
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFICATIONS);
+            return;
+        }
+        remindersEnabled = true;
+        prefs.edit().putBoolean("reminders_enabled", true).apply();
+        if (fastStartedAtMs > 0L) scheduleFastEndReminder();
+        scheduleEatingReminder();
+        toast("Local reminders enabled."); renderPage();
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_NOTIFICATIONS) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                remindersEnabled = true;
+                prefs.edit().putBoolean("reminders_enabled", true).apply();
+                if (fastStartedAtMs > 0L) scheduleFastEndReminder();
+                scheduleEatingReminder();
+                toast("Local reminders enabled.");
+            } else {
+                toast("Notification permission was not granted.");
+            }
+            renderPage();
+        }
+    }
+
+    private void scheduleFastEndReminder() {
+        if (!remindersEnabled || fastStartedAtMs == 0L) return;
+        scheduleReminder(1002, fastStartedAtMs + fastingHours * HOUR_MS, "Fasting target reached", "Your " + fastingHours + "-hour timer has finished.");
+    }
+
+    private void scheduleEatingReminder() {
+        if (!remindersEnabled) return;
+        Calendar c = Calendar.getInstance();
+        c.set(Calendar.HOUR_OF_DAY, eatingStartHour); c.set(Calendar.MINUTE, 0); c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0);
+        if (c.getTimeInMillis() <= System.currentTimeMillis()) c.add(Calendar.DAY_OF_YEAR, 1);
+        scheduleReminder(1003, c.getTimeInMillis(), "Your planned eating window", "Your saved eating-window reminder is due.");
+    }
+
+    private void scheduleReminder(int requestId, long at, String title, String body) {
+        try {
+            Intent intent = new Intent(this, ReminderReceiver.class);
+            intent.putExtra("title", title); intent.putExtra("body", body);
+            PendingIntent pi = PendingIntent.getBroadcast(this, requestId, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            AlarmManager alarm = (AlarmManager) getSystemService(ALARM_SERVICE);
+            if (alarm != null) alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, Math.max(at, System.currentTimeMillis() + 1000L), pi);
+        } catch (Exception ignored) { toast("Couldn't schedule that reminder on this device."); }
+    }
+
+    private void cancelReminder(int requestId) {
+        Intent intent = new Intent(this, ReminderReceiver.class);
+        PendingIntent pi = PendingIntent.getBroadcast(this, requestId, intent, PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
+        if (pi != null) {
+            AlarmManager alarm = (AlarmManager) getSystemService(ALARM_SERVICE);
+            if (alarm != null) alarm.cancel(pi);
+            pi.cancel();
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Fasting-app-inspired body, hydration, nutrition, recipes, planning,
+    // food scanning, educational content, challenges and achievements.
+    // ---------------------------------------------------------------------
+
+    private void renderWeight(LinearLayout page) {
+        addPageHeader(page, "Weight & measurements", "Track the trend, not a single day.", () -> { healthScreen = "menu"; renderPage(); });
+        double latest = latestWeightKg();
+        double bmi = heightCm > 0 ? latest / Math.pow(heightCm / 100.0, 2.0) : 0;
+        LinearLayout hero = card();
+        hero.addView(text("LATEST WEIGHT", 10, MUTED, true), margin(0, 0, 0, 5));
+        hero.addView(text(latest > 0 ? String.format(Locale.getDefault(), "%.1f kg", latest) : "No weight logged yet", 29, GREEN, true), margin(0, 0, 0, 5));
+        hero.addView(text("Goal: " + String.format(Locale.getDefault(), "%.1f kg", goalWeightKg) + " · Height: " + String.format(Locale.getDefault(), "%.0f cm", heightCm), 12, MUTED, false), margin(0, 0, 0, 6));
+        hero.addView(text(latest > 0 ? String.format(Locale.getDefault(), "BMI estimate: %.1f", bmi) : "Log a weight to calculate a BMI estimate.", 13, TEXT, true), margin(0, 0, 0, 10));
+        hero.addView(actionButton("+ Log weight / body measurement", GREEN, BG, () -> showWeightDialog()));
+        page.addView(hero, margin(0, 0, 0, 12));
+        page.addView(actionButton("Edit height and weight goal", SURFACE_2, TEXT, () -> showProfileDialog()), margin(0, 0, 0, 13));
+        page.addView(sectionTitle("Weight history", "The list below is stored locally on this device."), margin(0, 0, 0, 8));
+        if (weights.length() == 0) emptyState(page, "No measurements yet", "Add a measurement to start building your trend.");
+        for (int i = weights.length() - 1; i >= 0; i--) {
+            JSONObject entry = weights.optJSONObject(i);
+            if (entry == null) continue;
+            LinearLayout box = card();
+            box.addView(text(String.format(Locale.getDefault(), "%.1f kg", entry.optDouble("kg", 0)), 17, TEXT, true), margin(0, 0, 0, 4));
+            String waist = entry.optDouble("waist", 0) > 0 ? String.format(Locale.getDefault(), " · Waist %.1f cm", entry.optDouble("waist")) : "";
+            box.addView(text(dateText(entry.optLong("time", 0)) + waist, 12, MUTED, false));
+            page.addView(box, margin(0, 0, 0, 8));
+        }
+        page.addView(text("BMI is a rough screening measure, not a diagnosis. Body composition, age, health and other factors matter.", 11, MUTED, false), margin(0, 6, 0, 0));
+    }
+
+    private void renderWater(LinearLayout page) {
+        addPageHeader(page, "Water tracker", "Log drinks and set a personal daily target.", () -> { healthScreen = "menu"; renderPage(); });
+        int today = waterMlToday();
+        LinearLayout hero = card();
+        hero.setBackground(roundRect(0xFF153039, dp(24)));
+        hero.addView(text("TODAY'S WATER", 10, CYAN, true), margin(0, 0, 0, 7));
+        waterTodaySummary = text(today + " ml", 31, TEXT, true);
+        hero.addView(waterTodaySummary, margin(0, 0, 0, 4));
+        hero.addView(text("Goal: " + waterGoalMl + " ml", 12, MUTED, false), margin(0, 0, 0, 10));
+        ProgressBar bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        bar.setMax(Math.max(1, waterGoalMl)); bar.setProgress(Math.min(today, waterGoalMl));
+        bar.setProgressTintList(android.content.res.ColorStateList.valueOf(CYAN));
+        bar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF2E4950));
+        hero.addView(bar, margin(0, 0, 0, 13));
+        LinearLayout options = row();
+        options.addView(actionButton("+150 ml", CYAN, BG, () -> addWater(150)), weighted(1, 0, 4, 0, 0));
+        options.addView(actionButton("+250 ml", CYAN, BG, () -> addWater(250)), weighted(1, 4, 0, 4, 0));
+        options.addView(actionButton("+500 ml", CYAN, BG, () -> addWater(500)), weighted(1, 4, 0, 0, 0));
+        hero.addView(options);
+        page.addView(hero, margin(0, 0, 0, 12));
+        page.addView(actionButton("Set daily water goal", SURFACE_2, TEXT, () -> showWaterGoalDialog()), margin(0, 0, 0, 13));
+        page.addView(sectionTitle("Today's drinks", "Tap a logged drink to remove it."), margin(0, 0, 0, 8));
+        boolean any = false;
+        for (int i = waterRecords.length() - 1; i >= 0; i--) {
+            JSONObject w = waterRecords.optJSONObject(i);
+            if (w == null || !todayKey().equals(w.optString("date"))) continue;
+            any = true;
+            String id = w.optString("id");
+            LinearLayout line = card();
+            line.addView(text("+" + w.optInt("ml", 0) + " ml", 15, TEXT, true), margin(0, 0, 0, 3));
+            line.addView(text(formatClockTime(w.optLong("time", 0)) + " · " + w.optString("note", "Drink"), 11, MUTED, false));
+            line.setOnClickListener(v -> { waterRecords = removeById(waterRecords, id); saveState(); renderPage(); });
+            page.addView(line, margin(0, 0, 0, 7));
+        }
+        if (!any) emptyState(page, "No water logged yet", "Start with a glass of water and add it above.");
+        page.addView(text("Hydration needs vary with temperature, exercise, health and diet. This app's goal is a reminder, not medical guidance.", 11, MUTED, false), margin(0, 7, 0, 0));
+    }
+
+    private void renderFood(LinearLayout page) {
+        addPageHeader(page, "Food diary", "Track calories and macros with editable entries.", () -> { healthScreen = "menu"; renderPage(); });
+        int kcal = caloriesToday();
+        double protein = macroToday("protein");
+        double carbs = macroToday("carbs");
+        double fat = macroToday("fat");
+        LinearLayout hero = card();
+        hero.addView(text("CALORIES LOGGED TODAY", 10, MUTED, true), margin(0, 0, 0, 6));
+        caloriesTodaySummary = text(kcal + " kcal", 29, GREEN, true);
+        hero.addView(caloriesTodaySummary, margin(0, 0, 0, 3));
+        hero.addView(text("Personal target: " + dailyCaloriesGoal + " kcal", 12, MUTED, false), margin(0, 0, 0, 12));
+        ProgressBar calorieBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        calorieBar.setMax(Math.max(1, dailyCaloriesGoal)); calorieBar.setProgress(Math.min(kcal, dailyCaloriesGoal));
+        calorieBar.setProgressTintList(android.content.res.ColorStateList.valueOf(GREEN));
+        calorieBar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(SURFACE_2));
+        hero.addView(calorieBar, margin(0, 0, 0, 12));
+        hero.addView(text(String.format(Locale.getDefault(), "Protein %.0fg  ·  Carbs %.0fg  ·  Fat %.0fg", protein, carbs, fat), 12, TEXT, true), margin(0, 0, 0, 11));
+        hero.addView(actionButton("+ Log a meal", GREEN, BG, () -> showMealDialog("Snack", null)));
+        page.addView(hero, margin(0, 0, 0, 12));
+
+        LinearLayout scan = card();
+        scan.addView(text("Add food quickly", 17, TEXT, true), margin(0, 0, 0, 5));
+        scan.addView(text("Barcode lookup uses Open Food Facts when online. Photo mode suggests labels from an on-device image model when available; always check nutrition values yourself.", 12, MUTED, false), margin(0, 0, 0, 10));
+        scan.addView(actionButton("Scan barcode", ORANGE, BG, () -> startBarcodeScan()), margin(0, 0, 0, 7));
+        scan.addView(actionButton("Take food photo", CYAN, BG, () -> takeFoodPhoto()), margin(0, 0, 0, 7));
+        scan.addView(actionButton("Choose food photo", SURFACE_2, TEXT, () -> chooseFoodPhoto()), margin(0, 0, 0, 7));
+        scan.addView(actionButton("Browse starter food list", SURFACE_2, TEXT, () -> showFoodPresets()));
+        page.addView(scan, margin(0, 0, 0, 13));
+
+        page.addView(sectionTitle("Today's meals", "Calories and macros are estimates, not a prescription."), margin(0, 0, 0, 8));
+        boolean any = false;
+        for (int i = meals.length() - 1; i >= 0; i--) {
+            JSONObject meal = meals.optJSONObject(i);
+            if (meal == null || !todayKey().equals(meal.optString("date"))) continue;
+            any = true;
+            String id = meal.optString("id");
+            LinearLayout box = card();
+            LinearLayout line = row();
+            LinearLayout info = vertical();
+            info.addView(text(meal.optString("name", "Meal"), 15, TEXT, true));
+            info.addView(text(meal.optString("kind", "Snack") + " · " + formatClockTime(meal.optLong("time", 0)), 10, MUTED, false), margin(0, 3, 0, 0));
+            line.addView(info, new LinearLayout.LayoutParams(0, -2, 1f));
+            line.addView(text(meal.optInt("calories", 0) + " kcal", 15, ORANGE, true));
+            box.addView(line, margin(0, 0, 0, 7));
+            box.addView(text(String.format(Locale.getDefault(), "P %.1fg  ·  C %.1fg  ·  F %.1fg", meal.optDouble("protein", 0), meal.optDouble("carbs", 0), meal.optDouble("fat", 0)), 11, MUTED, false), margin(0, 0, 0, 8));
+            LinearLayout actions = row();
+            Button delete = button("Remove", SURFACE_2, RED, 11);
+            delete.setOnClickListener(v -> { meals = removeById(meals, id); saveState(); renderPage(); });
+            actions.addView(delete, weighted(0.55f, 0, 0, 0, 0));
+            box.addView(actions);
+            page.addView(box, margin(0, 0, 0, 8));
+        }
+        if (!any) emptyState(page, "Your diary is empty", "Add a meal manually, scan a barcode or try photo-assisted food entry.");
