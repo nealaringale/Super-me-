@@ -30,7 +30,7 @@
         EditText mins = field("25", "Optional session length in minutes", InputType.TYPE_CLASS_NUMBER);
         form.addView(label); form.addView(mins);
         new AlertDialog.Builder(this).setTitle("Start a named session").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Start", (d, w) -> {
-            String name = label.getText().toString().trim(); currentFocusLabel = name.isEmpty() ? "Study session" : name;
+            String name = label.getText().toString().trim(); currentFocusLabel = name.isEmpty() ? "Study session" : name; focusAccumulatedMs = 0L;
             int m = 25;
             try { if (!mins.getText().toString().trim().isEmpty()) m = Integer.parseInt(mins.getText().toString().trim()); }
             catch (Exception ignored) { }
