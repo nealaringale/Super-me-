@@ -9,9 +9,9 @@
     }
 
     private void renderFast(LinearLayout page) {
-        if ("history".equals(healthScreen)) { renderFastingHistory(page); return; }
-        if ("stages".equals(healthScreen)) { renderFastingStages(page); return; }
-        if ("plans".equals(healthScreen)) { renderFastingPlans(page); return; }
+        if ("history".equals(fastScreen)) { renderFastingHistory(page); return; }
+        if ("stages".equals(fastScreen)) { renderFastingStages(page); return; }
+        if ("plans".equals(fastScreen)) { renderFastingPlans(page); return; }
 
         addPageHeader(page, "Fasting", "Your fasting clock and weekly rhythm.", null);
         LinearLayout hero = card();
@@ -31,7 +31,7 @@
         LinearLayout fastActions = row();
         fastActions.addView(actionButton(fastStartedAtMs == 0L ? "Start fast" : "End fast", ORANGE, BG, () -> toggleFast()), weighted(1, 0, 5, 0, 0));
         Button change = button("Change plan", SURFACE_2, TEXT, 12);
-        change.setOnClickListener(v -> { healthScreen = "plans"; renderPage(); });
+        change.setOnClickListener(v -> { fastScreen = "plans"; renderPage(); });
         fastActions.addView(change, weighted(1, 5, 0, 0, 0));
         hero.addView(fastActions);
         page.addView(hero, margin(0, 0, 0, 14));
@@ -50,9 +50,9 @@
         summary.addView(statCard("COMPLETED FASTS", Integer.toString(fastHistory.length()), "in your history", ORANGE), weighted(1, 0, 6, 0, 0));
         summary.addView(statCard("CURRENT TARGET", fastingHours + " hours", "" + (24 - fastingHours) + "h eating window", GREEN), weighted(1, 6, 0, 0, 0));
         page.addView(summary, margin(0, 0, 0, 14));
-        addModuleCard(page, "Weekly plan & fasting options", "12:12 through 23:1, plus a custom duration.", "Choose a plan →", ORANGE, () -> { healthScreen = "plans"; renderPage(); });
-        addModuleCard(page, "Fasting history", "Review start/end times and past fasting windows.", "View history →", CYAN, () -> { healthScreen = "history"; renderPage(); });
-        addModuleCard(page, "Fasting stages & learning", "General educational notes about the fast; responses vary.", "Learn more →", GREEN, () -> { healthScreen = "stages"; renderPage(); });
+        addModuleCard(page, "Weekly plan & fasting options", "12:12 through 23:1, plus a custom duration.", "Choose a plan →", ORANGE, () -> { fastScreen = "plans"; renderPage(); });
+        addModuleCard(page, "Fasting history", "Review start/end times and past fasting windows.", "View history →", CYAN, () -> { fastScreen = "history"; renderPage(); });
+        addModuleCard(page, "Fasting stages & learning", "General educational notes about the fast; responses vary.", "Learn more →", GREEN, () -> { fastScreen = "stages"; renderPage(); });
         addModuleCard(page, "Reminders", remindersEnabled ? "Local reminders are enabled." : "Optional local reminders for your timer.", remindersEnabled ? "Manage reminders →" : "Enable reminders →", CYAN, () -> toggleReminders());
     }
 
