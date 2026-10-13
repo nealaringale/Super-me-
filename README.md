@@ -1,46 +1,63 @@
-# Super Me — personal health & habit dashboard
+# Super Me — unified study, productivity, fasting and nutrition app
 
-Super Me is an original Android app project that brings together the ideas of habit/time tracking from TrackIt and a fasting timer from Fasting Tracker in one offline-first dashboard.
+Super Me is an original Android project that brings useful workflows from a study/time-tracking app and a fasting/food diary app into one local-first experience.
 
-> This is a clean reimplementation, not a binary merge and not a copy of either third-party app's code, branding, paid features, or assets. The two supplied APKs use different packages/frameworks, and TrackIt appears to be missing the native Flutter ABI libraries from the uploaded APK set. Combining their compiled APKs directly would not produce a reliable installable app.
+**Important:** this is not a literal APK merger and it is not a pixel-perfect clone. The two source APKs have different package identities and compiled internals. Super Me independently implements similar user-facing workflows without copying their proprietary source, artwork, paid features, account systems, or private backend services.
 
-## Current features
+## Modules in this version
 
-- Daily habit checklist with add/remove and per-day completion reset.
-- Activity timer with a custom session label and a daily tracked-time total.
-- Fasting timer with 12, 14, 16, 18, or 20-hour target selection.
-- Local persistence using Android SharedPreferences; no account or backend required.
-- Single dashboard, single app ID (`com.nealaringale.superme`), and custom dark visual style.
+### Study and productivity
+- Home dashboard with daily summaries.
+- Projects and syllabus roadmaps with custom topics/tasks, completion toggles and logged time.
+- Built-in starter templates for Python, data structures and algorithms, C/C++, web development, full-stack, machine learning, JEE/CET, GATE, project launch, and general study planning.
+- Pomodoro focus/break cycles (25/5, 50/10 and custom), timer persistence, completed rounds, manual time logging and recent session history.
+- Flashcards with decks, recall rating, and local spaced-review intervals.
+- Editable notes with share actions.
+- Full-page clock with 12/24-hour formatting and several background themes.
+- Study progress cards and a 28-day completion calendar.
 
-## Build
+### Fasting and wellbeing
+- Selectable fasting targets (12, 14, 16, 18, 20 or 23 hours) and a custom 1–23-hour timer.
+- Live fasting countdown, elapsed time, previous-session history and editable eating-window hours.
+- Opt-in local notifications for the fasting target and the planned eating-window time.
+- Weight and optional waist measurements, height and goal settings, and a rough BMI estimate.
+- Water intake log and a configurable personal reminder target.
+- Food diary with editable calories/protein/carbohydrates/fat values and daily totals.
+- Barcode scanning with optional Open Food Facts lookup when the user scans a product.
+- Photo-assisted food entry: an on-device image-label suggestion can prefill a name, but it does not estimate nutrition. Check calories and macros yourself.
+- Starter food list, starter recipe cards, meal-planning prompts, educational insights, self-managed challenges and locally calculated milestones.
+- JSON export/import for supported local records.
+
+## Build a debug APK
 
 Requirements:
-
-- Android Studio with Android SDK Platform 35
+- Android Studio / Android SDK Platform 35
 - JDK 17
-- Android Gradle Plugin 8.7.3 (Gradle 8.9 or compatible wrapper)
+- Gradle 8.9 (the GitHub Actions workflow installs it)
 
-Open this repository as a project in Android Studio and let Gradle sync. Then select **Run** or run:
+The main activity source is stored as ordered text files under app/src/main/java-parts/ to keep individual GitHub commits manageable. The Gradle generateMainActivity task joins those parts into a Java source file before compilation.
 
-```bash
-gradle assembleDebug
-```
+Run gradle assembleDebug from a checkout.
 
-The debug APK should be produced at `app/build/outputs/apk/debug/app-debug.apk`.
+Output: app/build/outputs/apk/debug/app-debug.apk
 
-This environment did not have an Android SDK or Gradle installed, so an APK build/install test has not been claimed. Build and test on an emulator or spare device before relying on it.
+A GitHub Actions workflow also builds and uploads the debug APK artifact for each push to main. A successful compile does not replace installing and testing on a real device. Barcode scanning, photo selection, permission prompts, notification delivery, timer persistence and backup import/export should all be tested on a supported device.
 
-## Data and privacy
+## Data, privacy and limits
 
-The current version stores habits, activity timing, and the active fasting timer locally on the device, with Android app backup disabled. It does not declare internet, advertising, analytics, location, or health sensor permissions. Uninstalling the app or clearing its app data removes the local data.
+- Most records are stored locally in Android SharedPreferences. Cloud sync, account login and remote AI coaching are not implemented.
+- Android app backup is disabled in this build.
+- Internet permission is used only for a user-initiated barcode lookup to Open Food Facts.
+- The app requests camera access at the platform level for camera integration, but image capture uses the external camera app; no account, location, advertising, or analytics SDK has been added.
+- The photo-label feature uses a generic ML Kit image-labeling model, not a dedicated nutrition model. It must not be treated as an AI calorie scanner.
+- Calorie values in starter recipes and foods are estimates. They vary by brands, portions and preparation.
+- Fasting and body-tracking features are informational only, not medical advice.
+- TrackIt may require companion split APKs for all of its original runtime libraries. Premium/online catalogues, remote templates, account-synced records, native widgets and server-side personalised features from the source apps are not automatically reproduced here.
 
-## Next steps
+## Feature coverage and source notes
 
-- Add automated UI/unit tests and a proper Gradle wrapper.
-- Add export/import for local progress.
-- Add optional reminders with explicit permission and user-controlled settings.
-- Validate timer behaviour over device restarts and time-zone/day changes.
+See docs/feature-matrix.md for a source-to-Super-Me feature mapping and what is not yet equivalent. See docs/source-apk-notes.md for observed package metadata and architecture notes.
 
-## Source APK notes
+## License and attribution
 
-The source uploads were inspected as ZIP/APK containers. See [`docs/source-apk-notes.md`](docs/source-apk-notes.md) for identifying metadata and why they have not been bundled into this public repository.
+Super Me is an independent reimplementation. The input APKs are not redistributed by this repository, and no claim of affiliation with the original publishers is made. Respect each original app's terms and only analyse software you are authorised to inspect.
