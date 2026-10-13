@@ -65,8 +65,13 @@
         put(root, "projects", projects); put(root, "notes", notes); put(root, "flashcards", flashcards); put(root, "sessions", sessions);
         put(root, "meals", meals); put(root, "weights", weights); put(root, "waterRecords", waterRecords); put(root, "fastHistory", fastHistory); put(root, "challengeRecords", challengeRecords);
         put(root, "fastingHours", fastingHours); put(root, "heightCm", heightCm); put(root, "goalWeightKg", goalWeightKg); put(root, "waterGoalMl", waterGoalMl); put(root, "caloriesGoal", dailyCaloriesGoal);
-        Intent share = new Intent(Intent.ACTION_SEND); share.setType("application/json"); share.putExtra(Intent.EXTRA_SUBJECT, "Super Me data backup"); share.putExtra(Intent.EXTRA_TEXT, root.toString());
-        startActivity(Intent.createChooser(share, "Export Super Me data"));
+        pendingExportJson = root.toString();
+        Intent create = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        create.addCategory(Intent.CATEGORY_OPENABLE);
+        create.setType("application/json");
+        create.putExtra(Intent.EXTRA_TITLE, "super-me-backup.json");
+        try { startActivityForResult(create, REQ_EXPORT_DATA); }
+        catch (Exception e) { toast("A file picker isn't available on this device."); }
     }
 
     private void importData() {
@@ -100,6 +105,19 @@
         });
     }
 
+    private void writeExportToUri(Uri uri) {
+        final String json = pendingExportJson;
+        background.execute(() -> {
+            try (java.io.OutputStream output = getContentResolver().openOutputStream(uri)) {
+                if (output == null) throw new IllegalStateException("Could not open the selected file.");
+                output.write(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                runOnUiThread(() -> toast("Super Me backup saved."));
+            } catch (Exception e) {
+                runOnUiThread(() -> toast("Couldn't save backup: " + e.getMessage()));
+            }
+        });
+    }
+
     private void shareText(String title, String body) {
         Intent share = new Intent(Intent.ACTION_SEND); share.setType("text/plain"); share.putExtra(Intent.EXTRA_SUBJECT, title); share.putExtra(Intent.EXTRA_TEXT, body);
         startActivity(Intent.createChooser(share, "Share"));
@@ -107,6 +125,7 @@
 
     @Override public void onBackPressed() {
         if ("STUDY".equals(tab) && !"menu".equals(studyScreen)) { studyScreen = "menu"; renderPage(); return; }
+        if ("FAST".equals(tab) && !"menu".equals(fastScreen)) { fastScreen = "menu"; renderPage(); return; }
         if ("HEALTH".equals(tab) && !"menu".equals(healthScreen)) { healthScreen = "menu"; renderPage(); return; }
         if (!"HOME".equals(tab)) { tab = "HOME"; renderNav(); renderPage(); return; }
         super.onBackPressed();
