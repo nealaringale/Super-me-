@@ -1,0 +1,259 @@
+        try { startActivityForResult(Intent.createChooser(intent, "Choose a food photo"), 701); }
+        catch (Exception e) { toast("No photo picker is available on this device."); }
+    }
+
+    private void takeFoodPhoto() {
+        foodReturnScreen = healthScreen;
+        Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        try { startActivityForResult(intent, 702); }
+        catch (Exception e) { toast("No camera app is available."); }
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        IntentResult barcode = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
+        if (barcode != null) {
+            if (barcode.getContents() != null) lookupBarcodeProduct(barcode.getContents());
+            else toast("Barcode scan cancelled.");
+            return;
+        }
+        if (requestCode == 703 && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            importDataFromUri(data.getData());
+            return;
+        }
+        if (resultCode != RESULT_OK || data == null) return;
+        try {
+            InputImage image;
+            if (requestCode == 701 && data.getData() != null) {
+                image = InputImage.fromFilePath(this, data.getData());
+            } else if (requestCode == 702 && data.getExtras() != null && data.getExtras().get("data") instanceof android.graphics.Bitmap) {
+                image = InputImage.fromBitmap((android.graphics.Bitmap) data.getExtras().get("data"), 0);
+            } else return;
+            analyseFoodPhoto(image);
+        } catch (Exception e) { toast("Couldn't read that photo. Try another image."); }
+    }
+
+    private void analyseFoodPhoto(InputImage image) {
+        toast("Analysing photo labels on-device…");
+        ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS).process(image)
+                .addOnSuccessListener(labels -> {
+                    String guess = "Food photo";
+                    if (labels != null && !labels.isEmpty()) {
+                        ImageLabel best = labels.get(0);
+                        guess = best.getText();
+                    }
+                    JSONObject seed = new JSONObject(); put(seed, "name", guess);
+                    new AlertDialog.Builder(this).setTitle("Photo label suggestion")
+                            .setMessage("The image model suggests “" + guess + "”. This generic image labeler cannot reliably calculate food calories or macros. Enter verified nutrition values yourself.")
+                            .setNegativeButton("Cancel", null).setPositiveButton("Add nutrition details", (d, w) -> showMealDialog("Photo-assisted food", seed)).show();
+                })
+                .addOnFailureListener(error -> new AlertDialog.Builder(this).setTitle("Photo labelling unavailable")
+                        .setMessage("The on-device image model could not process this photo. You can still enter the food manually.\n\n" + error.getLocalizedMessage())
+                        .setNegativeButton("Close", null).setPositiveButton("Enter food", (d, w) -> showMealDialog("Photo food", null)).show());
+    }
+
+    // ---------------------------------------------------------------------
+    // Persistence, import/export, shared utility functions and live clocks.
+    // ---------------------------------------------------------------------
+
+    private void loadState() {
+        projects = loadArray("projects"); notes = loadArray("notes"); flashcards = loadArray("flashcards");
+        sessions = loadArray("sessions"); meals = loadArray("meals"); weights = loadArray("weights");
+        waterRecords = loadArray("water_records"); fastHistory = loadArray("fast_history"); challengeRecords = loadArray("challenge_records");
+        fastingHours = prefs.getInt("fasting_hours", 16);
+        fastStartedAtMs = prefs.getLong("fast_started_at", 0L);
+        waterGoalMl = prefs.getInt("water_goal_ml", 2200);
+        heightCm = prefs.getFloat("height_cm", 170f);
+        goalWeightKg = prefs.getFloat("goal_weight_kg", 75f);
+        dailyCaloriesGoal = prefs.getInt("calories_goal", 2000);
+        remindersEnabled = prefs.getBoolean("reminders_enabled", false);
+        eatingStartHour = prefs.getInt("eating_start_hour", 12);
+        eatingEndHour = prefs.getInt("eating_end_hour", 20);
+        pomodoroMode = prefs.getString("pomodoro_mode", "FOCUS");
+        pomodoroDurationMs = prefs.getLong("pomodoro_duration", prefs.getInt("pomodoro_focus_mins", 25) * MINUTE_MS);
+        pomodoroRemainingMs = prefs.getLong("pomodoro_remaining", pomodoroDurationMs);
+        pomodoroEndsAtMs = prefs.getLong("pomodoro_ends_at", 0L);
+        focusSessionStartedAtMs = prefs.getLong("focus_session_started", 0L);
+        pomodoroRunning = prefs.getBoolean("pomodoro_running", false);
+        focusCycles = prefs.getInt("focus_cycles", 0);
+        currentFocusLabel = prefs.getString("current_focus_label", "Deep work");
+        clockThemeIndex = prefs.getInt("clock_theme_index", 0);
+        if (fastingHours < 1 || fastingHours > 23) fastingHours = 16;
+        if (waterGoalMl < 100 || waterGoalMl > 10000) waterGoalMl = 2200;
+        if (heightCm < 80 || heightCm > 250) heightCm = 170;
+        if (goalWeightKg < 20 || goalWeightKg > 400) goalWeightKg = 75;
+        if (dailyCaloriesGoal < 500 || dailyCaloriesGoal > 10000) dailyCaloriesGoal = 2000;
+        if (eatingStartHour < 0 || eatingStartHour > 23) eatingStartHour = 12;
+        if (eatingEndHour < 0 || eatingEndHour > 23 || eatingEndHour == eatingStartHour) eatingEndHour = 20;
+        if (!"FOCUS".equals(pomodoroMode) && !"BREAK".equals(pomodoroMode) && !"LONG_BREAK".equals(pomodoroMode)) pomodoroMode = "FOCUS";
+        if (pomodoroRunning && pomodoroEndsAtMs <= System.currentTimeMillis()) {
+            pomodoroRemainingMs = Math.max(0L, pomodoroEndsAtMs - System.currentTimeMillis());
+            pomodoroRunning = true;
+        }
+        rollDailyStateIfNeeded();
+    }
+
+    private JSONArray loadArray(String key) {
+        try { return new JSONArray(prefs.getString(key, "[]")); }
+        catch (Exception e) { return new JSONArray(); }
+    }
+
+    private void saveState() {
+        prefs.edit()
+                .putString("projects", projects.toString())
+                .putString("notes", notes.toString())
+                .putString("flashcards", flashcards.toString())
+                .putString("sessions", sessions.toString())
+                .putString("meals", meals.toString())
+                .putString("weights", weights.toString())
+                .putString("water_records", waterRecords.toString())
+                .putString("fast_history", fastHistory.toString())
+                .putString("challenge_records", challengeRecords.toString())
+                .putLong("fast_started_at", fastStartedAtMs)
+                .putInt("fasting_hours", fastingHours)
+                .putInt("water_goal_ml", waterGoalMl)
+                .putFloat("height_cm", (float) heightCm)
+                .putFloat("goal_weight_kg", (float) goalWeightKg)
+                .putInt("calories_goal", dailyCaloriesGoal)
+                .putBoolean("reminders_enabled", remindersEnabled)
+                .putInt("eating_start_hour", eatingStartHour)
+                .putInt("eating_end_hour", eatingEndHour)
+                .putInt("clock_theme_index", clockThemeIndex)
+                .apply();
+    }
+
+    private void rollDailyStateIfNeeded() {
+        String today = todayKey();
+        String saved = prefs.getString("last_open_date", today);
+        if (!today.equals(saved)) {
+            prefs.edit().putString("last_open_date", today).apply();
+            // Historical entries remain untouched. Daily totals derive from their date keys.
+        } else if (!prefs.contains("last_open_date")) {
+            prefs.edit().putString("last_open_date", today).apply();
+        }
+    }
+
+    private void logSession(String label, long seconds, String type, String projectId, String taskId) {
+        if (seconds <= 0) return;
+        long now = System.currentTimeMillis();
+        JSONObject s = new JSONObject();
+        put(s, "id", id()); put(s, "label", label); put(s, "type", type); put(s, "seconds", seconds);
+        put(s, "start", now - seconds * 1000L); put(s, "end", now); put(s, "date", todayKey());
+        put(s, "projectId", projectId); put(s, "taskId", taskId);
+        sessions.put(s);
+        if (projectId != null && !projectId.isEmpty() && taskId != null && !taskId.isEmpty()) {
+            JSONObject project = findById(projects, projectId);
+            JSONObject task = project == null ? null : findById(project.optJSONArray("items"), taskId);
+            if (task != null) put(task, "seconds", task.optLong("seconds", 0L) + seconds);
+        }
+        saveState();
+    }
+
+    private void updateTimerLabels() {
+        tickPomodoro();
+        if (pomodoroClockLabel != null) pomodoroClockLabel.setText(formatClockCountdown(currentPomodoroRemaining()));
+        if (pomodoroModeLabel != null) pomodoroModeLabel.setText(modeTitle(pomodoroMode) + (pomodoroRunning ? " · RUNNING" : " · PAUSED"));
+        if (pomodoroProgress != null) {
+            long total = Math.max(1L, pomodoroDurationMs);
+            int progress = (int) Math.max(0, Math.min(1000, 1000L * (total - currentPomodoroRemaining()) / total));
+            pomodoroProgress.setProgress(progress);
+        }
+        if (fastCountdownLabel != null) {
+            if (fastStartedAtMs == 0L) fastCountdownLabel.setText(String.format(Locale.getDefault(), "%02d:00:00", fastingHours));
+            else {
+                long elapsed = Math.max(0L, System.currentTimeMillis() - fastStartedAtMs);
+                long target = fastingHours * HOUR_MS;
+                if (elapsed >= target) fastCountdownLabel.setText("00:00:00");
+                else fastCountdownLabel.setText(formatHms(target - elapsed));
+            }
+        }
+        if (fastStatusLabel != null) {
+            if (fastStartedAtMs == 0L) fastStatusLabel.setText("Choose a plan to start a fasting window.");
+            else {
+                long elapsed = Math.max(0L, System.currentTimeMillis() - fastStartedAtMs);
+                long target = fastingHours * HOUR_MS;
+                fastStatusLabel.setText(elapsed >= target ? "Target reached · you can end the timer whenever you're ready." : "Started " + formatClockTime(fastStartedAtMs) + " · " + formatDuration(elapsed / 1000L) + " elapsed");
+            }
+        }
+        if (fastProgressBar != null) {
+            long target = Math.max(1L, fastingHours * HOUR_MS);
+            long elapsed = fastStartedAtMs == 0L ? 0L : System.currentTimeMillis() - fastStartedAtMs;
+            fastProgressBar.setProgress((int) Math.max(0, Math.min(1000, elapsed * 1000L / target)));
+        }
+        if (waterTodaySummary != null) waterTodaySummary.setText(waterMlToday() + " ml");
+        if (caloriesTodaySummary != null) caloriesTodaySummary.setText(caloriesToday() + " kcal");
+        if (clockTimeLabel != null) clockTimeLabel.setText(new SimpleDateFormat(prefs.getBoolean("clock_24h", true) ? "HH:mm:ss" : "h:mm:ss a", Locale.getDefault()).format(new Date()));
+    }
+
+    private void renderPageIfClockVisible() {
+        if ("STUDY".equals(tab) && "pomodoro".equals(studyScreen)) renderPage();
+    }
+
+    private int completedTodayTasks() {
+        int count = 0;
+        for (int i = 0; i < projects.length(); i++) {
+            JSONObject p = projects.optJSONObject(i); JSONArray items = p == null ? null : p.optJSONArray("items");
+            if (items == null) continue;
+            for (int j = 0; j < items.length(); j++) {
+                JSONObject t = items.optJSONObject(j);
+                if (t != null && t.optBoolean("done") && todayKey().equals(dayKey(t.optLong("completedAt", 0L)))) count++;
+            }
+        }
+        return count;
+    }
+
+    private boolean hasAnyCompletedTask() {
+        for (int i = 0; i < projects.length(); i++) {
+            JSONObject p = projects.optJSONObject(i); JSONArray items = p == null ? null : p.optJSONArray("items");
+            if (items == null) continue;
+            for (int j = 0; j < items.length(); j++) { JSONObject t = items.optJSONObject(j); if (t != null && t.optBoolean("done")) return true; }
+        }
+        return false;
+    }
+
+    private String studySecondsTodayText() {
+        long seconds = 0L;
+        for (int i = 0; i < sessions.length(); i++) { JSONObject s = sessions.optJSONObject(i); if (s != null && todayKey().equals(s.optString("date"))) seconds += s.optLong("seconds", 0L); }
+        return formatDuration(seconds);
+    }
+
+    private int waterMlToday() {
+        int total = 0;
+        for (int i = 0; i < waterRecords.length(); i++) { JSONObject r = waterRecords.optJSONObject(i); if (r != null && todayKey().equals(r.optString("date"))) total += r.optInt("ml", 0); }
+        return total;
+    }
+
+    private int caloriesToday() {
+        int total = 0;
+        for (int i = 0; i < meals.length(); i++) { JSONObject m = meals.optJSONObject(i); if (m != null && todayKey().equals(m.optString("date"))) total += m.optInt("calories", 0); }
+        return total;
+    }
+
+    private double macroToday(String key) {
+        double total = 0;
+        for (int i = 0; i < meals.length(); i++) { JSONObject m = meals.optJSONObject(i); if (m != null && todayKey().equals(m.optString("date"))) total += m.optDouble(key, 0); }
+        return total;
+    }
+
+    private double latestWeightKg() {
+        if (weights.length() == 0) return prefs.getFloat("starting_weight_kg", 0f);
+        JSONObject latest = weights.optJSONObject(weights.length() - 1);
+        return latest == null ? 0 : latest.optDouble("kg", 0);
+    }
+
+    private JSONObject findById(JSONArray array, String id) {
+        if (array == null || id == null) return null;
+        for (int i = 0; i < array.length(); i++) { JSONObject obj = array.optJSONObject(i); if (obj != null && id.equals(obj.optString("id"))) return obj; }
+        return null;
+    }
+
+    private JSONArray removeById(JSONArray array, String id) {
+        JSONArray next = new JSONArray();
+        if (array == null) return next;
+        for (int i = 0; i < array.length(); i++) {
+            JSONObject item = array.optJSONObject(i);
+            if (item == null || !id.equals(item.optString("id"))) next.put(array.opt(i));
+        }
+        return next;
+    }
+
