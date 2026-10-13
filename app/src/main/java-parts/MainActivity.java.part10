@@ -1,0 +1,114 @@
+    private static void put(JSONObject obj, String key, Object value) {
+        try { obj.put(key, value); } catch (JSONException ignored) { }
+    }
+
+    private String todayKey() { return dayKey(System.currentTimeMillis()); }
+    private String dayKey(long time) { return new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(time)); }
+    private long startOfDay(long time) { Calendar c = Calendar.getInstance(); c.setTimeInMillis(time); c.set(Calendar.HOUR_OF_DAY, 0); c.set(Calendar.MINUTE, 0); c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0); return c.getTimeInMillis(); }
+    private String dateText(long time) { return new SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(new Date(time)); }
+    private String formatClockTime(long time) { return new SimpleDateFormat("h:mm a", Locale.getDefault()).format(new Date(time)); }
+    private String formatClock(int hour, int minute) { Calendar c = Calendar.getInstance(); c.set(Calendar.HOUR_OF_DAY, hour); c.set(Calendar.MINUTE, minute); return new SimpleDateFormat("h:mm a", Locale.getDefault()).format(c.getTime()); }
+    private String dueText(long due) { if (due <= System.currentTimeMillis()) return "now"; long diff = due - System.currentTimeMillis(); if (diff < HOUR_MS) return "in " + Math.max(1, diff / MINUTE_MS) + " min"; if (diff < 24 * HOUR_MS) return "in " + Math.max(1, diff / HOUR_MS) + " h"; return new SimpleDateFormat("d MMM", Locale.getDefault()).format(new Date(due)); }
+    private String greeting() { int h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY); return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; }
+    private String formatDuration(long seconds) { seconds = Math.max(0, seconds); long h = seconds / 3600L; long m = (seconds % 3600L) / 60L; return h > 0 ? String.format(Locale.getDefault(), "%dh %02dm", h, m) : String.format(Locale.getDefault(), "%dm", m); }
+    private String formatClockCountdown(long millis) { return formatHms(Math.max(0L, millis)); }
+    private String formatHms(long millis) { long total = Math.max(0L, millis / 1000L); long h = total / 3600L; long m = (total % 3600L) / 60L; long s = total % 60L; return String.format(Locale.getDefault(), "%02d:%02d:%02d", h, m, s); }
+    private String modeTitle(String mode) { return "FOCUS".equals(mode) ? "FOCUS BLOCK" : "LONG_BREAK".equals(mode) ? "LONG BREAK" : "SHORT BREAK"; }
+    private String number(double n) { return n == Math.rint(n) ? Long.toString(Math.round(n)) : String.format(Locale.US, "%.1f", n); }
+    private double parseDoubleOrZero(String v) { return v == null || v.trim().isEmpty() ? 0 : Double.parseDouble(v.trim()); }
+    private String id() { return UUID.randomUUID().toString(); }
+    private int BLUE() { return Color.rgb(119, 189, 255); }
+
+    private LinearLayout vertical() { LinearLayout v = new LinearLayout(this); v.setOrientation(LinearLayout.VERTICAL); return v; }
+    private LinearLayout row() { LinearLayout v = new LinearLayout(this); v.setOrientation(LinearLayout.HORIZONTAL); return v; }
+
+    private LinearLayout card() {
+        LinearLayout box = vertical(); box.setPadding(dp(16), dp(16), dp(16), dp(16)); box.setBackground(roundRect(SURFACE, dp(20))); return box;
+    }
+
+    private Button button(String value, int background, int foreground, int textSize) {
+        Button b = new Button(this); b.setText(value); b.setAllCaps(false); b.setTextSize(textSize); b.setTextColor(foreground);
+        b.setTypeface(Typeface.create("sans-serif", Typeface.BOLD)); b.setMinHeight(0); b.setMinimumHeight(0); b.setPadding(dp(8), dp(5), dp(8), dp(5));
+        b.setBackground(roundRect(background, dp(13))); b.setStateListAnimator(null); return b;
+    }
+
+    private Button actionButton(String label, int background, int foreground, Runnable action) {
+        Button b = button(label, background, foreground, 12); b.setOnClickListener(v -> action.run());
+        b.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(45))); return b;
+    }
+
+    private TextView text(String value, int sp, int color, boolean bold) {
+        TextView t = new TextView(this); t.setText(value); t.setTextSize(sp); t.setTextColor(color);
+        t.setTypeface(Typeface.create("sans-serif", bold ? Typeface.BOLD : Typeface.NORMAL)); t.setIncludeFontPadding(true); return t;
+    }
+
+    private GradientDrawable roundRect(int color, int radius) { GradientDrawable d = new GradientDrawable(); d.setColor(color); d.setCornerRadius(radius); return d; }
+    private LinearLayout.LayoutParams margin(int left, int top, int right, int bottom) { LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2); p.leftMargin = dp(left); p.topMargin = dp(top); p.rightMargin = dp(right); p.bottomMargin = dp(bottom); return p; }
+    private LinearLayout.LayoutParams weighted(float weight, int left, int top, int right, int bottom) { LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, weight); p.leftMargin = dp(left); p.topMargin = dp(top); p.rightMargin = dp(right); p.bottomMargin = dp(bottom); return p; }
+    private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+    private EditText edit(String value, String hint, int inputType) { EditText e = new EditText(this); e.setText(value); e.setHint(hint); e.setSingleLine(true); e.setInputType(inputType); e.setTextColor(Color.BLACK); e.setHintTextColor(Color.GRAY); e.setTextSize(14); e.setPadding(dp(12), dp(10), dp(12), dp(10)); return e; }
+    private EditText field(String value, String hint, int inputType) { EditText e = edit(value, hint, inputType); LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2); p.bottomMargin = dp(9); e.setLayoutParams(p); e.setBackground(roundRect(Color.WHITE, dp(9))); return e; }
+    private LinearLayout formLayout() { LinearLayout f = vertical(); f.setPadding(dp(4), dp(4), dp(4), dp(2)); return f; }
+    private View padded(View view) { view.setPadding(dp(20), dp(10), dp(20), dp(10)); return view; }
+    private void emptyState(LinearLayout page, String title, String subtitle) { LinearLayout box = card(); box.setGravity(Gravity.CENTER); box.addView(text(title, 16, TEXT, true), margin(0, 0, 0, 5)); box.addView(text(subtitle, 12, MUTED, false)); page.addView(box, margin(0, 0, 0, 10)); }
+    private void toast(String message) { Toast.makeText(this, message, Toast.LENGTH_SHORT).show(); }
+
+    private void showAboutDialog() {
+        new AlertDialog.Builder(this).setTitle("About Super Me")
+                .setMessage("Super Me combines original implementations of study planning, focus/time tracking, flashcards, notes, project templates, fasting timers, weight and body measurements, water intake, food logging, barcode lookup, photo-assisted labels, recipes, meal planning, local reminders, insights, challenges and achievements.\n\nThis app does not include the original developers' source, proprietary assets, premium account systems or server-based personalised coaching. The app is currently local-first, with the barcode feature making a request to Open Food Facts only when used.")
+                .setPositiveButton("Got it", null).show();
+    }
+
+    private void exportData() {
+        JSONObject root = new JSONObject();
+        put(root, "format", "super-me-backup-v1"); put(root, "exportedAt", System.currentTimeMillis());
+        put(root, "projects", projects); put(root, "notes", notes); put(root, "flashcards", flashcards); put(root, "sessions", sessions);
+        put(root, "meals", meals); put(root, "weights", weights); put(root, "waterRecords", waterRecords); put(root, "fastHistory", fastHistory); put(root, "challengeRecords", challengeRecords);
+        put(root, "fastingHours", fastingHours); put(root, "heightCm", heightCm); put(root, "goalWeightKg", goalWeightKg); put(root, "waterGoalMl", waterGoalMl); put(root, "caloriesGoal", dailyCaloriesGoal);
+        Intent share = new Intent(Intent.ACTION_SEND); share.setType("application/json"); share.putExtra(Intent.EXTRA_SUBJECT, "Super Me data backup"); share.putExtra(Intent.EXTRA_TEXT, root.toString());
+        startActivity(Intent.createChooser(share, "Export Super Me data"));
+    }
+
+    private void importData() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("application/json");
+        try { startActivityForResult(intent, 703); }
+        catch (Exception e) { toast("A file picker isn't available on this device."); }
+    }
+
+    private void importDataFromUri(Uri uri) {
+        background.execute(() -> {
+            StringBuilder raw = new StringBuilder();
+            try (java.io.InputStream in = getContentResolver().openInputStream(uri); BufferedReader reader = new BufferedReader(new InputStreamReader(in))) {
+                String line; while ((line = reader.readLine()) != null) raw.append(line);
+                JSONObject root = new JSONObject(raw.toString());
+                if (!"super-me-backup-v1".equals(root.optString("format"))) throw new IllegalArgumentException("This file is not a Super Me backup.");
+                runOnUiThread(() -> {
+                    projects = root.optJSONArray("projects") == null ? new JSONArray() : root.optJSONArray("projects");
+                    notes = root.optJSONArray("notes") == null ? new JSONArray() : root.optJSONArray("notes");
+                    flashcards = root.optJSONArray("flashcards") == null ? new JSONArray() : root.optJSONArray("flashcards");
+                    sessions = root.optJSONArray("sessions") == null ? new JSONArray() : root.optJSONArray("sessions");
+                    meals = root.optJSONArray("meals") == null ? new JSONArray() : root.optJSONArray("meals");
+                    weights = root.optJSONArray("weights") == null ? new JSONArray() : root.optJSONArray("weights");
+                    waterRecords = root.optJSONArray("waterRecords") == null ? new JSONArray() : root.optJSONArray("waterRecords");
+                    fastHistory = root.optJSONArray("fastHistory") == null ? new JSONArray() : root.optJSONArray("fastHistory");
+                    challengeRecords = root.optJSONArray("challengeRecords") == null ? new JSONArray() : root.optJSONArray("challengeRecords");
+                    fastingHours = root.optInt("fastingHours", fastingHours); heightCm = root.optDouble("heightCm", heightCm); goalWeightKg = root.optDouble("goalWeightKg", goalWeightKg);
+                    waterGoalMl = root.optInt("waterGoalMl", waterGoalMl); dailyCaloriesGoal = root.optInt("caloriesGoal", dailyCaloriesGoal);
+                    saveState(); renderPage(); toast("Backup imported.");
+                });
+            } catch (Exception e) { runOnUiThread(() -> toast("Couldn't import this file: " + e.getMessage())); }
+        });
+    }
+
+    private void shareText(String title, String body) {
+        Intent share = new Intent(Intent.ACTION_SEND); share.setType("text/plain"); share.putExtra(Intent.EXTRA_SUBJECT, title); share.putExtra(Intent.EXTRA_TEXT, body);
+        startActivity(Intent.createChooser(share, "Share"));
+    }
+
+    @Override public void onBackPressed() {
+        if ("STUDY".equals(tab) && !"menu".equals(studyScreen)) { studyScreen = "menu"; renderPage(); return; }
+        if ("HEALTH".equals(tab) && !"menu".equals(healthScreen)) { healthScreen = "menu"; renderPage(); return; }
+        if (!"HOME".equals(tab)) { tab = "HOME"; renderNav(); renderPage(); return; }
+        super.onBackPressed();
+    }
+}
