@@ -1,0 +1,206 @@
+            progress.setProgressTintList(android.content.res.ColorStateList.valueOf(CYAN));
+            progress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(SURFACE_2));
+            box.addView(progress, margin(0, 0, 0, 11));
+            LinearLayout actions = row();
+            actions.addView(actionButton("Open project", CYAN, BG, () -> { selectedProjectId = id; studyScreen = "project-detail"; renderPage(); }), weighted(1, 0, 4, 0, 0));
+            Button export = button("Share", SURFACE_2, TEXT, 11);
+            export.setOnClickListener(v -> shareProject(project));
+            actions.addView(export, weighted(0.48f, 4, 0, 0, 0));
+            Button remove = button("Delete", 0xFF3B292B, RED, 11);
+            remove.setOnClickListener(v -> confirmDeleteProject(id, project.optString("name", "project")));
+            actions.addView(remove, weighted(0.45f, 4, 0, 0, 0));
+            box.addView(actions);
+            page.addView(box, margin(0, 0, 0, 10));
+        }
+    }
+
+    private void renderProjectDetail(LinearLayout page) {
+        JSONObject project = findById(projects, selectedProjectId);
+        if (project == null) { studyScreen = "projects"; renderProjects(page); return; }
+        addPageHeader(page, project.optString("name", "Project"), project.optString("kind", "Project") + " · topic-level progress", () -> { studyScreen = "projects"; renderPage(); });
+        JSONArray items = project.optJSONArray("items");
+        if (items == null) items = new JSONArray();
+        int done = 0;
+        long tracked = 0L;
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject task = items.optJSONObject(i);
+            if (task == null) continue;
+            if (task.optBoolean("done")) done++;
+            tracked += task.optLong("seconds", 0L);
+        }
+        LinearLayout summary = card();
+        summary.addView(text(done + " / " + items.length() + " topics complete", 19, GREEN, true), margin(0, 0, 0, 4));
+        summary.addView(text("Time logged to topics: " + formatDuration(tracked), 12, MUTED, false));
+        page.addView(summary, margin(0, 0, 0, 12));
+        LinearLayout actions = row();
+        actions.addView(actionButton("+ Add topic", CYAN, BG, () -> showTaskDialog(project)), weighted(1, 0, 5, 0, 0));
+        actions.addView(actionButton("Log time", GREEN, BG, () -> showLogTopicTimeDialog(project, null)), weighted(1, 5, 0, 0, 0));
+        page.addView(actions, margin(0, 0, 0, 14));
+        page.addView(text("Topics & tasks", 17, TEXT, true), margin(0, 0, 0, 8));
+        if (items.length() == 0) emptyState(page, "This project is empty", "Add a topic, chapter or next action to start tracking progress.");
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject task = items.optJSONObject(i);
+            if (task == null) continue;
+            final String taskId = task.optString("id");
+            final String title = task.optString("title", "Untitled topic");
+            LinearLayout line = row();
+            line.setGravity(Gravity.CENTER_VERTICAL);
+            line.setPadding(dp(11), dp(8), dp(8), dp(8));
+            line.setBackground(roundRect(task.optBoolean("done") ? 0xFF1D352E : SURFACE, dp(14)));
+            Button check = button(task.optBoolean("done") ? "✓" : "○", task.optBoolean("done") ? GREEN : SURFACE_2, task.optBoolean("done") ? BG : MUTED, 15);
+            check.setOnClickListener(v -> {
+                JSONObject liveProject = findById(projects, selectedProjectId);
+                JSONObject liveTask = liveProject == null ? null : findById(liveProject.optJSONArray("items"), taskId);
+                if (liveTask != null) {
+                    boolean next = !liveTask.optBoolean("done");
+                    put(liveTask, "done", next);
+                    put(liveTask, "completedAt", next ? System.currentTimeMillis() : 0L);
+                    saveState(); renderPage();
+                }
+            });
+            line.addView(check, new LinearLayout.LayoutParams(dp(42), dp(42)));
+            LinearLayout details = vertical();
+            details.setPadding(dp(9), 0, dp(4), 0);
+            details.addView(text(title, 14, task.optBoolean("done") ? GREEN : TEXT, true));
+            details.addView(text(formatDuration(task.optLong("seconds", 0L)) + " tracked", 10, MUTED, false), margin(0, 3, 0, 0));
+            line.addView(details, new LinearLayout.LayoutParams(0, -2, 1f));
+            Button time = button("+time", SURFACE_2, CYAN, 10);
+            time.setOnClickListener(v -> showLogTopicTimeDialog(project, task));
+            line.addView(time, new LinearLayout.LayoutParams(dp(57), dp(38)));
+            Button del = button("×", SURFACE_2, MUTED, 17);
+            del.setOnClickListener(v -> removeTask(project, taskId));
+            line.addView(del, new LinearLayout.LayoutParams(dp(38), dp(38)));
+            page.addView(line, margin(0, 0, 0, 7));
+        }
+    }
+
+    private void renderPomodoro(LinearLayout page) {
+        addPageHeader(page, "Pomodoro timer", "Focus sessions, breaks and time records.", () -> { studyScreen = "menu"; renderPage(); });
+        LinearLayout hero = card();
+        hero.setBackground(roundRect(0xFF152D30, dp(26)));
+        pomodoroModeLabel = text(modeTitle(pomodoroMode), 12, CYAN, true);
+        pomodoroModeLabel.setGravity(Gravity.CENTER);
+        hero.addView(pomodoroModeLabel, margin(0, 6, 0, 9));
+        pomodoroClockLabel = text(formatClockCountdown(currentPomodoroRemaining()), 46, TEXT, true);
+        pomodoroClockLabel.setGravity(Gravity.CENTER);
+        hero.addView(pomodoroClockLabel, margin(0, 0, 0, 14));
+        pomodoroProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        pomodoroProgress.setMax(1000);
+        pomodoroProgress.setProgressTintList(android.content.res.ColorStateList.valueOf(CYAN));
+        pomodoroProgress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF31474B));
+        hero.addView(pomodoroProgress, margin(0, 0, 0, 14));
+        hero.addView(text("Completed focus rounds: " + focusCycles, 12, MUTED, false), margin(0, 0, 0, 11));
+        LinearLayout buttons = row();
+        buttons.addView(actionButton(pomodoroRunning ? "Pause" : "Start", GREEN, BG, () -> togglePomodoro()), weighted(1, 0, 5, 0, 0));
+        buttons.addView(actionButton("Reset", SURFACE_2, TEXT, () -> resetPomodoro()), weighted(1, 5, 0, 0, 0));
+        hero.addView(buttons);
+        page.addView(hero, margin(0, 0, 0, 14));
+
+        LinearLayout durationCard = card();
+        durationCard.addView(text("Session lengths", 17, TEXT, true), margin(0, 0, 0, 10));
+        LinearLayout presets = row();
+        addPresetButton(presets, "25 / 5", 25, 5);
+        addPresetButton(presets, "50 / 10", 50, 10);
+        addPresetButton(presets, "Custom", -1, -1);
+        durationCard.addView(presets, margin(0, 0, 0, 9));
+        durationCard.addView(text("A focus block is logged when it completes or when you finish it manually. Break time is not counted as study time.", 12, MUTED, false));
+        page.addView(durationCard, margin(0, 0, 0, 14));
+
+        LinearLayout log = card();
+        log.addView(text("Track time for a subject or topic", 17, TEXT, true), margin(0, 0, 0, 5));
+        log.addView(text("Use a named timer or log a session manually if you forgot to start it.", 12, MUTED, false), margin(0, 0, 0, 10));
+        log.addView(actionButton("Start named session", CYAN, BG, () -> showNamedSessionDialog()), margin(0, 0, 0, 7));
+        log.addView(actionButton("Log missed time", SURFACE_2, TEXT, () -> showManualSessionDialog()));
+        page.addView(log, margin(0, 0, 0, 14));
+
+        page.addView(sectionTitle("Today's tracked sessions", "" + studySecondsTodayText() + " of focused time today"), margin(0, 0, 0, 8));
+        renderSessionList(page, todayKey());
+    }
+
+    private void renderFlashcards(LinearLayout page) {
+        addPageHeader(page, "Spaced-repetition cards", "Recall first, then reveal the answer.", () -> { studyScreen = "menu"; renderPage(); });
+        Button create = actionButton("+ Create flashcard", ORANGE, BG, () -> showFlashcardDialog());
+        page.addView(create, margin(0, 0, 0, 12));
+        long now = System.currentTimeMillis();
+        int dueCount = 0;
+        for (int i = 0; i < flashcards.length(); i++) {
+            JSONObject f = flashcards.optJSONObject(i);
+            if (f != null && f.optLong("due", 0L) <= now) dueCount++;
+        }
+        LinearLayout summary = card();
+        summary.addView(text(dueCount + " cards due for review", 18, ORANGE, true), margin(0, 0, 0, 4));
+        summary.addView(text("Again schedules soon; Good and Easy increase the interval. Reviews are saved locally.", 12, MUTED, false));
+        page.addView(summary, margin(0, 0, 0, 13));
+        if (flashcards.length() == 0) emptyState(page, "No cards yet", "Create question-and-answer cards for definitions, formulas and facts.");
+        page.addView(text("Your cards", 17, TEXT, true), margin(0, 0, 0, 8));
+        for (int i = 0; i < flashcards.length(); i++) {
+            JSONObject f = flashcards.optJSONObject(i);
+            if (f == null) continue;
+            String id = f.optString("id");
+            LinearLayout box = card();
+            box.addView(text(f.optString("deck", "General"), 10, CYAN, true), margin(0, 0, 0, 5));
+            box.addView(text(f.optString("question", "Question"), 15, TEXT, true), margin(0, 0, 0, 6));
+            box.addView(text("Due " + dueText(f.optLong("due", 0L)), 11, MUTED, false), margin(0, 0, 0, 9));
+            LinearLayout actions = row();
+            actions.addView(actionButton("Review", CYAN, BG, () -> startReview(id)), weighted(1, 0, 5, 0, 0));
+            Button delete = button("Delete", SURFACE_2, RED, 11);
+            delete.setOnClickListener(v -> { flashcards = removeById(flashcards, id); saveState(); renderPage(); });
+            actions.addView(delete, weighted(0.5f, 5, 0, 0, 0));
+            box.addView(actions);
+            page.addView(box, margin(0, 0, 0, 9));
+        }
+    }
+
+    private void renderNotes(LinearLayout page) {
+        addPageHeader(page, "Notes", "Quick ideas, definitions and study summaries.", () -> { studyScreen = "menu"; renderPage(); });
+        page.addView(actionButton("+ New note", GREEN, BG, () -> showNoteDialog(null)), margin(0, 0, 0, 12));
+        if (notes.length() == 0) emptyState(page, "No notes yet", "Capture a concept while it is fresh, then link it to your revision later.");
+        for (int i = 0; i < notes.length(); i++) {
+            JSONObject note = notes.optJSONObject(i);
+            if (note == null) continue;
+            String id = note.optString("id");
+            LinearLayout box = card();
+            box.addView(text(note.optString("title", "Untitled note"), 16, TEXT, true), margin(0, 0, 0, 5));
+            String body = note.optString("body", "");
+            box.addView(text(body.length() > 160 ? body.substring(0, 157) + "…" : body, 12, MUTED, false), margin(0, 0, 0, 9));
+            LinearLayout actions = row();
+            actions.addView(actionButton("Edit note", CYAN, BG, () -> showNoteDialog(note)), weighted(1, 0, 5, 0, 0));
+            Button share = button("Share", SURFACE_2, TEXT, 11);
+            share.setOnClickListener(v -> shareText(note.optString("title", "Note"), note.optString("body", "")));
+            actions.addView(share, weighted(0.55f, 5, 0, 0, 0));
+            Button remove = button("×", 0xFF3B292B, RED, 16);
+            remove.setOnClickListener(v -> { notes = removeById(notes, id); saveState(); renderPage(); });
+            actions.addView(remove, new LinearLayout.LayoutParams(dp(38), dp(43)));
+            box.addView(actions);
+            page.addView(box, margin(0, 0, 0, 9));
+        }
+    }
+
+    private void renderFlipClock(LinearLayout page) {
+        addPageHeader(page, "Flip clock", "A simple full-page clock for focus time.", () -> { studyScreen = "menu"; renderPage(); });
+        int[] backgrounds = {0xFF141D28, 0xFF162E2A, 0xFF30251C, 0xFF201C34};
+        LinearLayout clock = card();
+        clock.setGravity(Gravity.CENTER);
+        clock.setBackground(roundRect(backgrounds[clockThemeIndex % backgrounds.length], dp(26)));
+        clock.setPadding(dp(20), dp(40), dp(20), dp(40));
+        clockTimeLabel = text(new SimpleDateFormat(prefs.getBoolean("clock_24h", true) ? "HH:mm:ss" : "h:mm:ss a", Locale.getDefault()).format(new Date()), 39, TEXT, true);
+        clockTimeLabel.setGravity(Gravity.CENTER);
+        clock.addView(clockTimeLabel, margin(0, 0, 0, 12));
+        TextView day = text(new SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault()).format(new Date()), 13, MUTED, false);
+        day.setGravity(Gravity.CENTER);
+        clock.addView(day, margin(0, 0, 0, 25));
+        clock.addView(text("FOCUS ON THE NEXT THING", 10, GREEN, true), margin(0, 0, 0, 0));
+        page.addView(clock, margin(0, 0, 0, 13));
+        page.addView(actionButton("Change clock wallpaper", CYAN, BG, () -> { clockThemeIndex = (clockThemeIndex + 1) % backgrounds.length; renderPage(); }), margin(0, 0, 0, 8));
+        page.addView(actionButton(prefs.getBoolean("clock_24h", true) ? "Switch to 12-hour format" : "Switch to 24-hour format", SURFACE_2, TEXT, () -> {
+            prefs.edit().putBoolean("clock_24h", !prefs.getBoolean("clock_24h", true)).apply(); renderPage();
+        }));
+    }
+
+    private void renderTemplates(LinearLayout page) {
+        addPageHeader(page, "Template library", "Import a starter roadmap and edit it for your goal.", () -> { studyScreen = "menu"; renderPage(); });
+        page.addView(text("These local templates are starter outlines—not a remote 1,000+ catalogue. You can add, remove and rename topics after importing.", 12, MUTED, false), margin(0, 0, 0, 13));
+        String[][] templates = {
+                {"Python foundations", "Coding", "Syntax and variables", "Conditions and loops", "Functions", "Lists and dictionaries", "Files and exceptions", "Modules and packages", "Mini-project"},
+                {"Data Structures & Algorithms", "Coding", "Complexity basics", "Arrays and strings", "Linked lists", "Stacks and queues", "Trees and heaps", "Graphs", "Sorting and searching", "Dynamic programming"},
+                {"C / C++ programming", "Coding", "Variables and types", "Conditions and loops", "Functions", "Arrays and strings", "Pointers and memory", "Structures and classes", "OOP", "STL and practice"},
