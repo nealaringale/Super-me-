@@ -21,6 +21,10 @@
             importDataFromUri(data.getData());
             return;
         }
+        if (requestCode == REQ_EXPORT_DATA && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            writeExportToUri(data.getData());
+            return;
+        }
         if (resultCode != RESULT_OK || data == null) return;
         try {
             InputImage image;
@@ -74,6 +78,7 @@
         pomodoroRemainingMs = prefs.getLong("pomodoro_remaining", pomodoroDurationMs);
         pomodoroEndsAtMs = prefs.getLong("pomodoro_ends_at", 0L);
         focusSessionStartedAtMs = prefs.getLong("focus_session_started", 0L);
+        focusAccumulatedMs = prefs.getLong("focus_accumulated_ms", 0L);
         pomodoroRunning = prefs.getBoolean("pomodoro_running", false);
         focusCycles = prefs.getInt("focus_cycles", 0);
         currentFocusLabel = prefs.getString("current_focus_label", "Deep work");
