@@ -1,0 +1,213 @@
+                {"Web development", "Coding", "HTML foundations", "CSS layouts", "JavaScript basics", "HTTP and APIs", "Frontend framework", "Backend basics", "Database", "Deploy a project"},
+                {"Full-stack development", "Coding", "Git and GitHub", "Frontend", "API design", "Authentication", "Database models", "Testing", "Deployment", "Capstone project"},
+                {"JEE / CET preparation", "Exam", "Physics revision", "Chemistry revision", "Mathematics revision", "Daily practice set", "Error notebook", "Mock test", "Analyse mistakes"},
+                {"GATE preparation", "Exam", "Core concepts", "Engineering mathematics", "Topic-wise problems", "Previous-year questions", "Revision notes", "Full mock tests", "Error analysis"},
+                {"Personal project launch", "Project", "Define problem", "Research options", "Design MVP", "Build first version", "Test with users", "Fix critical issues", "Prepare release"},
+                {"Machine learning foundations", "Coding", "Python and NumPy", "Linear algebra basics", "Statistics and probability", "Data preparation", "Regression and classification", "Model evaluation", "Small ML project"},
+                {"Full study planner", "Study", "Set semester goals", "Map each subject", "Plan weekly sessions", "Create flashcards", "Review notes", "Take practice tests", "Weekly review"}
+        };
+        for (String[] template : templates) {
+            LinearLayout box = card();
+            box.addView(text(template[0], 16, TEXT, true), margin(0, 0, 0, 4));
+            box.addView(text(template[1] + " · " + (template.length - 2) + " starter topics", 11, MUTED, false), margin(0, 0, 0, 9));
+            box.addView(actionButton("Import to my projects", CYAN, BG, () -> importTemplate(template)));
+            page.addView(box, margin(0, 0, 0, 9));
+        }
+        page.addView(sectionTitle("Make your own", "Use the project builder for any other syllabus or workflow."), margin(0, 7, 0, 8));
+        page.addView(actionButton("Create blank project", GREEN, BG, () -> showProjectDialog()));
+    }
+
+    private void renderStudyProgress(LinearLayout page) {
+        addPageHeader(page, "Study progress", "Time, completed topics and consistency.", () -> { studyScreen = "menu"; renderPage(); });
+        long total = 0L;
+        long week = 0L;
+        int todaySessions = 0;
+        for (int i = 0; i < sessions.length(); i++) {
+            JSONObject s = sessions.optJSONObject(i);
+            if (s == null) continue;
+            long seconds = s.optLong("seconds", 0L);
+            total += seconds;
+            long ended = s.optLong("end", s.optLong("start", 0L));
+            if (ended >= System.currentTimeMillis() - 7L * 24L * HOUR_MS) week += seconds;
+            if (todayKey().equals(s.optString("date"))) todaySessions++;
+        }
+        LinearLayout stats = row();
+        stats.addView(statCard("ALL TRACKED", formatDuration(total), "focused time", CYAN), weighted(1, 0, 6, 0, 0));
+        stats.addView(statCard("LAST 7 DAYS", formatDuration(week), "weekly focus", GREEN), weighted(1, 6, 0, 0, 0));
+        page.addView(stats, margin(0, 0, 0, 10));
+        LinearLayout stats2 = row();
+        stats2.addView(statCard("TODAY'S SESSIONS", Integer.toString(todaySessions), "logged sessions", ORANGE), weighted(1, 0, 6, 0, 0));
+        stats2.addView(statCard("FLASHCARDS", Integer.toString(flashcards.length()), "in your decks", CYAN), weighted(1, 6, 0, 0, 0));
+        page.addView(stats2, margin(0, 0, 0, 15));
+        page.addView(sectionTitle("Recent activity", "Your most recent focus sessions."), margin(0, 0, 0, 8));
+        renderSessionList(page, null);
+        page.addView(sectionTitle("Recent task completion", "A light-weight completion calendar."), margin(0, 14, 0, 8));
+        renderCompletionCalendar(page);
+    }
+
+    private void renderCompletionCalendar(LinearLayout page) {
+        LinearLayout grid = card();
+        grid.addView(text("LAST 28 DAYS", 10, MUTED, true), margin(0, 0, 0, 11));
+        LinearLayout row = row();
+        for (int d = 27; d >= 0; d--) {
+            long start = startOfDay(System.currentTimeMillis() - d * 24L * HOUR_MS);
+            String key = dayKey(start);
+            int completed = 0;
+            for (int p = 0; p < projects.length(); p++) {
+                JSONObject project = projects.optJSONObject(p);
+                JSONArray items = project == null ? null : project.optJSONArray("items");
+                if (items == null) continue;
+                for (int j = 0; j < items.length(); j++) {
+                    JSONObject task = items.optJSONObject(j);
+                    if (task != null && task.optLong("completedAt", -1L) >= 0L && key.equals(dayKey(task.optLong("completedAt", 0L)))) completed++;
+                }
+            }
+            TextView square = text(completed > 0 ? "•" : "·", 14, completed > 0 ? GREEN : 0xFF59676A, true);
+            square.setGravity(Gravity.CENTER);
+            square.setBackground(roundRect(completed > 0 ? 0xFF1E4036 : SURFACE_2, dp(4)));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(28), 1f);
+            lp.rightMargin = dp(2);
+            row.addView(square, lp);
+            if ((27 - d + 1) % 14 == 0) {
+                grid.addView(row, margin(0, 0, 0, 4));
+                row = row();
+            }
+        }
+        if (row.getChildCount() > 0) grid.addView(row);
+        page.addView(grid);
+    }
+
+    // ---------------------------------------------------------------------
+    // Fasting: plans, editable eating window, running clock, history and education.
+    // ---------------------------------------------------------------------
+
+    private void renderFastingPlans(LinearLayout page) {
+        addPageHeader(page, "Choose a fasting plan", "The split is a tracking preference, not a prescription.", () -> { healthScreen = "menu"; renderPage(); });
+        String[][] plans = {
+                {"12:12", "12", "A gentle time window"},
+                {"14:10", "14", "A shorter daily fast"},
+                {"16:8", "16", "A commonly used split"},
+                {"18:6", "18", "A longer fast"},
+                {"20:4", "20", "A very narrow eating window"},
+                {"23:1 / OMAD", "23", "One-meal-style window"}
+        };
+        for (String[] plan : plans) {
+            final int hours = Integer.parseInt(plan[1]);
+            LinearLayout box = card();
+            LinearLayout line = row();
+            line.setGravity(Gravity.CENTER_VERTICAL);
+            TextView bubble = text(plan[0], 14, BG, true);
+            bubble.setGravity(Gravity.CENTER);
+            bubble.setBackground(roundRect(fastingHours == hours ? ORANGE : CYAN, dp(12)));
+            line.addView(bubble, new LinearLayout.LayoutParams(dp(82), dp(53)));
+            LinearLayout labels = vertical();
+            labels.setPadding(dp(12), 0, dp(7), 0);
+            labels.addView(text(plan[2], 14, TEXT, true));
+            labels.addView(text(hours + "h fasting · " + (24 - hours) + "h eating window", 11, MUTED, false), margin(0, 3, 0, 0));
+            line.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
+            box.addView(line, margin(0, 0, 0, 10));
+            box.addView(actionButton(fastingHours == hours ? "Selected" : "Choose this plan", fastingHours == hours ? ORANGE : SURFACE_2, fastingHours == hours ? BG : TEXT, () -> {
+                if (fastStartedAtMs > 0L) { toast("End your active fast before changing plans."); return; }
+                fastingHours = hours; prefs.edit().putInt("fasting_hours", fastingHours).apply(); renderPage();
+            }));
+            page.addView(box, margin(0, 0, 0, 9));
+        }
+        LinearLayout custom = card();
+        custom.addView(text("Custom duration", 17, TEXT, true), margin(0, 0, 0, 5));
+        custom.addView(text("Set a personal duration from 1 to 23 hours.", 12, MUTED, false), margin(0, 0, 0, 10));
+        custom.addView(actionButton("Set custom hours", CYAN, BG, () -> showCustomFastDialog()));
+        page.addView(custom, margin(0, 0, 0, 12));
+        LinearLayout week = card();
+        week.addView(text("Weekly schedule", 17, TEXT, true), margin(0, 0, 0, 5));
+        week.addView(text("Your current default eating window is " + formatClock(eatingStartHour, 0) + "–" + formatClock(eatingEndHour, 0) + ". You can customise the window from the fasting screen.", 12, MUTED, false));
+        page.addView(week);
+    }
+
+    private void renderFastingHistory(LinearLayout page) {
+        addPageHeader(page, "Fasting history", "Every logged fast stays on your device.", () -> { healthScreen = "menu"; renderPage(); });
+        long total = 0L;
+        long longest = 0L;
+        for (int i = 0; i < fastHistory.length(); i++) {
+            JSONObject record = fastHistory.optJSONObject(i);
+            if (record == null) continue;
+            long duration = record.optLong("durationMs", 0L);
+            total += duration;
+            longest = Math.max(longest, duration);
+        }
+        LinearLayout stats = row();
+        stats.addView(statCard("COMPLETED / ENDED", Integer.toString(fastHistory.length()), "fasting sessions", ORANGE), weighted(1, 0, 6, 0, 0));
+        stats.addView(statCard("TOTAL TIME", formatDuration(total / 1000L), "all recorded sessions", GREEN), weighted(1, 6, 0, 0, 0));
+        page.addView(stats, margin(0, 0, 0, 10));
+        page.addView(text("Longest recorded window: " + formatDuration(longest / 1000L), 12, MUTED, false), margin(0, 0, 0, 13));
+        if (fastHistory.length() == 0) emptyState(page, "No fasting history yet", "When you end a fast, its start and end times will appear here.");
+        for (int i = fastHistory.length() - 1; i >= 0; i--) {
+            JSONObject r = fastHistory.optJSONObject(i);
+            if (r == null) continue;
+            LinearLayout box = card();
+            long start = r.optLong("start", 0L);
+            long end = r.optLong("end", 0L);
+            box.addView(text(new SimpleDateFormat("EEE, d MMM yyyy", Locale.getDefault()).format(new Date(start)), 14, TEXT, true), margin(0, 0, 0, 5));
+            box.addView(text(formatClockTime(start) + " – " + formatClockTime(end), 12, MUTED, false), margin(0, 0, 0, 3));
+            box.addView(text(formatDuration(r.optLong("durationMs", 0L) / 1000L) + " tracked · target " + r.optInt("targetHours", fastingHours) + "h · " + r.optString("result", "ended"), 12, ORANGE, true));
+            page.addView(box, margin(0, 0, 0, 8));
+        }
+    }
+
+    private void renderFastingStages(LinearLayout page) {
+        addPageHeader(page, "Fasting stages & insights", "General education, not a personalised biological clock.", () -> { healthScreen = "menu"; renderPage(); });
+        page.addView(text("Fasting experiences vary with meals, activity, health and individual physiology. The hours below are broad educational milestones, not guaranteed events or medical advice.", 13, MUTED, false), margin(0, 0, 0, 13));
+        String[][] stages = {
+                {"0–4 hours", "Post-meal period", "The body is digesting and absorbing nutrients from a recent meal."},
+                {"4–8 hours", "Between meals", "The body continues using available energy; the mix of energy sources varies."},
+                {"8–12 hours", "Fuel use changes", "Stored energy contributes increasingly, depending on the person and prior activity."},
+                {"12–16 hours", "Longer fasting window", "Metabolic responses vary substantially; there is no reliable universal switch time."},
+                {"16+ hours", "Individual responses", "Longer is not automatically better. Stop if unwell and avoid fasting when it is medically unsafe."}
+        };
+        for (String[] stage : stages) {
+            LinearLayout box = card();
+            box.addView(text(stage[0].toUpperCase(Locale.ROOT), 10, ORANGE, true), margin(0, 0, 0, 5));
+            box.addView(text(stage[1], 16, TEXT, true), margin(0, 0, 0, 5));
+            box.addView(text(stage[2], 12, MUTED, false));
+            page.addView(box, margin(0, 0, 0, 9));
+        }
+        page.addView(sectionTitle("Learn more", "Use credible sources and listen to your body."), margin(0, 8, 0, 7));
+        page.addView(text("This app only tracks elapsed time. It does not measure insulin, ketosis, autophagy, hydration status or any other physiological process.", 12, MUTED, false));
+    }
+
+    private void toggleFast() {
+        if (fastStartedAtMs == 0L) {
+            fastStartedAtMs = System.currentTimeMillis();
+            prefs.edit().putLong("fast_started_at", fastStartedAtMs).apply();
+            if (remindersEnabled) scheduleFastEndReminder();
+            toast("Fasting timer started.");
+        } else {
+            long now = System.currentTimeMillis();
+            JSONObject record = new JSONObject();
+            put(record, "id", id()); put(record, "start", fastStartedAtMs); put(record, "end", now);
+            put(record, "targetHours", fastingHours); put(record, "durationMs", Math.max(0L, now - fastStartedAtMs));
+            put(record, "result", now - fastStartedAtMs >= fastingHours * HOUR_MS ? "target reached" : "ended early");
+            fastHistory.put(record);
+            fastStartedAtMs = 0L;
+            prefs.edit().putLong("fast_started_at", 0L).apply();
+            cancelReminder(1002);
+            saveState();
+            toast("Fasting session saved to history.");
+        }
+        renderPage();
+    }
+
+    private void showCustomFastDialog() {
+        EditText hours = edit(Integer.toString(fastingHours), "Fasting hours (1–23)", InputType.TYPE_CLASS_NUMBER);
+        new AlertDialog.Builder(this).setTitle("Custom fasting plan").setMessage("Set the number of hours to track.")
+                .setView(padded(hours)).setNegativeButton("Cancel", null)
+                .setPositiveButton("Save plan", (d, w) -> {
+                    int value;
+                    try { value = Integer.parseInt(hours.getText().toString().trim()); }
+                    catch (Exception e) { toast("Enter a whole number from 1 to 23."); return; }
+                    if (value < 1 || value > 23) { toast("Enter a whole number from 1 to 23."); return; }
+                    if (fastStartedAtMs > 0L) { toast("End the active fast before changing your target."); return; }
+                    fastingHours = value; prefs.edit().putInt("fasting_hours", value).apply(); renderPage();
+                }).show();
+    }
+
+    private void showEatingWindowDialog() {
