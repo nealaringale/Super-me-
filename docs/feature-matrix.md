@@ -1,30 +1,44 @@
-# Source APK inspection notes
+# Feature coverage matrix
 
-These notes record the high-confidence static metadata used to plan Super Me. The original APK files and proprietary code/assets are intentionally not committed here.
+This matrix compares the kinds of workflows visible in the supplied APKs with the current Super Me implementation. “Implemented” means a local equivalent exists in this source build; it does not mean behaviour, design or backend parity with the original app has been verified.
 
-| Input file | Package | Version | Observed archive structure |
-|---|---|---|---|
-| TRACK IT.apk | app.vinztech.trackit | 1.5.6 (version code 156) | Three root DEX files, AndroidX/Compose-related libraries and widget receiver classes. The supplied archive contained no root lib/<abi>/*.so entries. |
-| Fasting Tracker.apk | bodyfast.zero.fastingtracker.weightloss | 2.5.8 (version code 158) | Three root DEX files, Kotlin/Android-style activity/DAO/service classes, food and barcode modules, and an embedded audience-network DEX. No root lib/<abi>/*.so entries were found. |
+## TrackIt — study and time management
 
-Both archives passed Python's ZIP integrity check. Their package IDs, activities, permissions, dependencies and resources differ. Their ZIP contents cannot safely be concatenated into one APK: both manifests and component names would collide or refer to incompatible resources, and the Android build/package/signing process would still be required.
+| Feature area | Super Me status | Notes / difference |
+|---|---|---|
+| Main dashboard and daily summaries | Implemented | New Super Me layout; not the same original artwork or pixel-perfect screen. |
+| Projects and syllabus hierarchy | Implemented (basic) | Projects contain topics/tasks and completion status; arbitrary deep hierarchy and publisher-provided syllabi are not replicated. |
+| Time tracking | Implemented | Manual time entry and session history; not a replacement for any original cloud syncing. |
+| Pomodoro focus and break cycles | Implemented | 25/5, 50/10, custom lengths, short/long break transitions and local session records. Background reliability and device-restart behaviour still require device testing. |
+| Spaced-repetition flashcards | Implemented (basic) | Local decks/questions, review ratings and increasing intervals; not guaranteed to match the source app's exact scheduling algorithm. |
+| Notes | Implemented | Create/edit/delete/share notes locally. |
+| Coding and exam templates | Partial | Several built-in starter roadmaps can be imported and edited. This is not an online or 1,000+ template catalogue or AI template generator. |
+| Flip clock | Implemented (basic) | 12/24-hour formats and background themes. |
+| Progress charts and completion calendar | Partial | Basic time totals and 28-day task-completion view; detailed original visualisations/streak algorithms may differ. |
+| Home-screen widgets | Not implemented | The source APK contains widget receiver classes; Super Me currently has in-app views only. |
+| Source app account/cloud sync, remote content, premium features | Not replicated | Requires original backend access, APIs and entitlement system; local records here are separate. |
 
-## Feature evidence visible in the supplied packages
+## Fasting Tracker — fasting, food and wellness
 
-The TrackIt DEX/resource names include its main activity, time-spent, completion and calendar-widget receivers, plus components consistent with projects, syllabus progress, flashcards, notes, templates, Pomodoro and clock features.
+| Feature area | Super Me status | Notes / difference |
+|---|---|---|
+| Fasting plans and custom duration | Implemented (basic) | 12:12, 14:10, 16:8, 18:6, 20:4, 23:1 and custom fasting-hour targets. |
+| Live timer, progress and history | Implemented | Local elapsed countdown and records when the user ends a fast. Needs device testing for restart/time changes. |
+| Eating-window settings | Implemented (basic) | User-set local clock hours; this does not automatically enforce eating or fasting. |
+| Local reminders | Implemented (basic) | Optional notifications for target finish and one planned eating-window time; not the original scheduling system. |
+| Weight, body measurements and BMI estimate | Implemented (basic) | Weight/waist entry, height/goal settings and a rough BMI estimate; no medical assessment. |
+| Hydration tracker | Implemented | Local drink log and adjustable daily target. |
+| Food diary, calories and macronutrients | Implemented (manual) | Edit entries and see daily totals. Nutrition data accuracy depends on inputs. |
+| Barcode scanning | Implemented (external database) | Looks up Open Food Facts when user scans; product availability and nutrition completeness vary. |
+| Food-photo / AI food scanner | Partial only | A generic on-device image label can suggest a name. It does not reliably recognise portions or calculate calories/macros. |
+| Starter food database | Partial | Small built-in list, not a comprehensive nutrition database. |
+| Recipes and meal planning | Partial | Starter recipe cards and meal-planning prompts, not a full personalised plan or remote recipe library. |
+| Tips/insights | Partial | Original educational cards; no claim of matching the source's medical or personalised guidance. |
+| Challenges, achievements and history | Implemented (basic) | Local self-managed challenges and milestones based on locally logged actions. |
+| Weight/water widgets, AI coaching, account sync, paid plans, server recommendations | Not replicated | Requires native widgets and/or the source publisher's account services, models, APIs and entitlement system. |
 
-The Fasting Tracker archive includes classes whose names indicate fasting plan/detail/custom-plan/history and processing features, weight/water widgets, food diary/nutrition, barcode scanning, photo-assisted food, recipes, meal-plan, challenges and achievements.
+## Combined-app look and architecture
 
-These names are evidence that code/resources exist in the archive, not proof that every feature works offline or that remote features can be reproduced. Obfuscated code, account services, server-issued configuration, subscriptions, remote content and third-party SDK behaviour cannot be faithfully reconstructed merely from class names.
+Super Me has its own dark dashboard, bottom navigation and separate Study, Fast, Health and More sections. The feature groups are available inside one Android package; the original APKs are not embedded, and their separate screens are not launched from a shell.
 
-## TrackIt package completeness
-
-The supplied TrackIt APK had no native .so files, and its manifest declares split-related configuration. It may therefore be only one member of an installed APK set or may rely on a distribution-specific packaging structure. Obtain all installed APK paths (for example using adb shell pm path app.vinztech.trackit) before relying on this file as a complete installable package. Its classes/resources do not, by themselves, establish that it is a Flutter app; the observed AndroidX/Compose-related entries point instead to a native Android UI implementation.
-
-## Super Me implementation boundary
-
-Super Me independently implements similar workflows: study/project tracking, timer and time history, flashcards, notes, clock and starter templates; fasting schedules and history; body and water logging; food and macros; barcode-based product lookup; limited on-device image-label suggestions; recipes; meal planning; insights; challenges; achievements; local reminders and backup import/export.
-
-This is a functional approximation, not a pixel-perfect or feature-for-feature reproduction. It does not include the original publishers' binaries, artwork, server credentials, account data, premium plans, subscription state or server-side personalised services. A general image-label model does not infer reliable calories/macros. Barcode lookup works only if a scanned code is in the external database and a network connection is available.
-
-Use only software you are authorised to inspect or modify.
+A literal “same” result would require the original source code, design assets, endpoint contracts, backend services and licenses—or substantial independent implementation and device testing to reach visual/behaviour parity. The supplied compiled APKs alone are not enough to guarantee an exact clone. This repository aims to build an independent combined app with similar user workflows while being explicit about missing or approximate features.
