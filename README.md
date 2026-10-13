@@ -32,7 +32,7 @@ This environment did not have an Android SDK or Gradle installed, so an APK buil
 
 ## Data and privacy
 
-The current version stores habits, activity timing, and the active fasting timer locally on the device. It does not declare internet, advertising, analytics, location, or health sensor permissions. Uninstalling the app or clearing its app data removes the local data.
+The current version stores habits, activity timing, and the active fasting timer locally on the device, with Android app backup disabled. It does not declare internet, advertising, analytics, location, or health sensor permissions. Uninstalling the app or clearing its app data removes the local data.
 
 ## Next steps
 
