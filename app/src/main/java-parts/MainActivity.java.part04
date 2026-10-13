@@ -82,7 +82,7 @@
     // ---------------------------------------------------------------------
 
     private void renderFastingPlans(LinearLayout page) {
-        addPageHeader(page, "Choose a fasting plan", "The split is a tracking preference, not a prescription.", () -> { healthScreen = "menu"; renderPage(); });
+        addPageHeader(page, "Choose a fasting plan", "The split is a tracking preference, not a prescription.", () -> { fastScreen = "menu"; renderPage(); });
         String[][] plans = {
                 {"12:12", "12", "A gentle time window"},
                 {"14:10", "14", "A shorter daily fast"},
@@ -124,7 +124,7 @@
     }
 
     private void renderFastingHistory(LinearLayout page) {
-        addPageHeader(page, "Fasting history", "Every logged fast stays on your device.", () -> { healthScreen = "menu"; renderPage(); });
+        addPageHeader(page, "Fasting history", "Every logged fast stays on your device.", () -> { fastScreen = "menu"; renderPage(); });
         long total = 0L;
         long longest = 0L;
         for (int i = 0; i < fastHistory.length(); i++) {
@@ -154,7 +154,7 @@
     }
 
     private void renderFastingStages(LinearLayout page) {
-        addPageHeader(page, "Fasting stages & insights", "General education, not a personalised biological clock.", () -> { healthScreen = "menu"; renderPage(); });
+        addPageHeader(page, "Fasting stages & insights", "General education, not a personalised biological clock.", () -> { fastScreen = "menu"; renderPage(); });
         page.addView(text("Fasting experiences vary with meals, activity, health and individual physiology. The hours below are broad educational milestones, not guaranteed events or medical advice.", 13, MUTED, false), margin(0, 0, 0, 13));
         String[][] stages = {
                 {"0–4 hours", "Post-meal period", "The body is digesting and absorbing nutrients from a recent meal."},
