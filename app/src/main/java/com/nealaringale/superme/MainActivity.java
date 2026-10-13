@@ -495,8 +495,8 @@ public class MainActivity extends Activity {
         EditText input = new EditText(this);
         input.setSingleLine(true);
         input.setHint("e.g. 20 minute walk");
-        input.setTextColor(TEXT);
-        input.setHintTextColor(MUTED);
+        input.setTextColor(Color.BLACK);
+        input.setHintTextColor(Color.GRAY);
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         int pad = dp(20);
         input.setPadding(pad, dp(12), pad, dp(12));
@@ -539,8 +539,8 @@ public class MainActivity extends Activity {
         input.setSingleLine(true);
         input.setText(focusLabel.equals("Focus session") ? "Focus session" : focusLabel);
         input.setHint("What are you working on?");
-        input.setTextColor(TEXT);
-        input.setHintTextColor(MUTED);
+        input.setTextColor(Color.BLACK);
+        input.setHintTextColor(Color.GRAY);
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         input.setPadding(dp(20), dp(12), dp(20), dp(12));
         new AlertDialog.Builder(this)
