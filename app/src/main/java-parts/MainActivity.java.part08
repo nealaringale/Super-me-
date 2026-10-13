@@ -1,0 +1,184 @@
+        StringBuilder body = new StringBuilder(project.optString("name", "Project")).append("\n\n");
+        if (items != null) for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i); if (item == null) continue;
+            body.append(item.optBoolean("done") ? "[x] " : "[ ] ").append(item.optString("title", "Topic")).append('\n');
+        }
+        shareText("Super Me project: " + project.optString("name", "Project"), body.toString());
+    }
+
+    // ---------------------------------------------------------------------
+    // Health and nutrition data entry, barcode lookup, photo-assisted labelling.
+    // ---------------------------------------------------------------------
+
+    private void showProfileDialog() {
+        LinearLayout form = formLayout();
+        EditText height = field(String.format(Locale.US, "%.0f", heightCm), "Height in cm", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        EditText goal = field(String.format(Locale.US, "%.1f", goalWeightKg), "Weight goal in kg", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        EditText water = field(Integer.toString(waterGoalMl), "Daily water goal in ml", InputType.TYPE_CLASS_NUMBER);
+        EditText calories = field(Integer.toString(dailyCaloriesGoal), "Daily calorie target (optional estimate)", InputType.TYPE_CLASS_NUMBER);
+        form.addView(height); form.addView(goal); form.addView(water); form.addView(calories);
+        new AlertDialog.Builder(this).setTitle("Profile & targets").setMessage("Targets are optional planning settings, not prescriptions.")
+                .setView(form).setNegativeButton("Cancel", null).setPositiveButton("Save", (d, w) -> {
+                    try {
+                        double h = Double.parseDouble(height.getText().toString().trim());
+                        double g = Double.parseDouble(goal.getText().toString().trim());
+                        int wg = Integer.parseInt(water.getText().toString().trim());
+                        int cg = Integer.parseInt(calories.getText().toString().trim());
+                        if (h < 80 || h > 250 || g < 20 || g > 400 || wg < 100 || wg > 10000 || cg < 500 || cg > 10000) throw new IllegalArgumentException();
+                        heightCm = h; goalWeightKg = g; waterGoalMl = wg; dailyCaloriesGoal = cg;
+                        prefs.edit().putFloat("height_cm", (float) h).putFloat("goal_weight_kg", (float) g)
+                                .putInt("water_goal_ml", wg).putInt("calories_goal", cg).apply();
+                        renderPage();
+                    } catch (Exception e) { toast("Check the values and try again."); }
+                }).show();
+    }
+
+    private void showWeightDialog() {
+        LinearLayout form = formLayout();
+        EditText kg = field(latestWeightKg() > 0 ? String.format(Locale.US, "%.1f", latestWeightKg()) : "", "Weight in kg", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        EditText waist = field("", "Waist in cm (optional)", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        form.addView(kg); form.addView(waist);
+        new AlertDialog.Builder(this).setTitle("Log a measurement").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Save", (d, w) -> {
+            try {
+                double weight = Double.parseDouble(kg.getText().toString().trim());
+                double wa = waist.getText().toString().trim().isEmpty() ? 0 : Double.parseDouble(waist.getText().toString().trim());
+                if (weight < 20 || weight > 400 || wa < 0 || wa > 300) throw new IllegalArgumentException();
+                JSONObject entry = new JSONObject(); put(entry, "id", id()); put(entry, "kg", weight); put(entry, "waist", wa); put(entry, "time", System.currentTimeMillis()); put(entry, "date", todayKey());
+                weights.put(entry); saveState(); renderPage();
+            } catch (Exception e) { toast("Enter a valid weight, and check waist if provided."); }
+        }).show();
+    }
+
+    private void showWaterGoalDialog() {
+        EditText goal = edit(Integer.toString(waterGoalMl), "Daily goal in ml", InputType.TYPE_CLASS_NUMBER);
+        new AlertDialog.Builder(this).setTitle("Daily hydration target").setView(padded(goal)).setNegativeButton("Cancel", null).setPositiveButton("Save", (d, w) -> {
+            try { int g = Integer.parseInt(goal.getText().toString().trim()); if (g < 100 || g > 10000) throw new IllegalArgumentException(); waterGoalMl = g; prefs.edit().putInt("water_goal_ml", g).apply(); renderPage(); }
+            catch (Exception e) { toast("Choose a target from 100 to 10000 ml."); }
+        }).show();
+    }
+
+    private void addWater(int ml) {
+        JSONObject r = new JSONObject(); put(r, "id", id()); put(r, "ml", ml); put(r, "time", System.currentTimeMillis()); put(r, "date", todayKey()); put(r, "note", "Drink");
+        waterRecords.put(r); saveState(); renderPage();
+    }
+
+    private void showMealDialog(String kind, JSONObject seed) {
+        LinearLayout form = formLayout();
+        String nameVal = seed == null ? "" : seed.optString("name", "");
+        double cal = seed == null ? 0 : seed.optDouble("calories", 0);
+        double p = seed == null ? 0 : seed.optDouble("protein", 0);
+        double c = seed == null ? 0 : seed.optDouble("carbs", 0);
+        double f = seed == null ? 0 : seed.optDouble("fat", 0);
+        EditText name = field(nameVal, "Food / meal name", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        EditText calories = field(cal > 0 ? number(cal) : "", "Calories (kcal) per serving", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        EditText protein = field(p > 0 ? number(p) : "", "Protein grams", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        EditText carbs = field(c > 0 ? number(c) : "", "Carbohydrate grams", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        EditText fat = field(f > 0 ? number(f) : "", "Fat grams", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        EditText serving = null;
+        if (seed != null && seed.optBoolean("per100g", false)) serving = field("100", "Serving size in grams (values above are per 100 g)", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        form.addView(name); form.addView(calories); form.addView(protein); form.addView(carbs); form.addView(fat);
+        if (serving != null) form.addView(serving);
+        final EditText servingInput = serving;
+        new AlertDialog.Builder(this).setTitle("Log " + kind.toLowerCase(Locale.ROOT)).setMessage("You can edit the suggested values; nutrition database values may be incomplete.")
+                .setView(form).setNegativeButton("Cancel", null).setPositiveButton("Add meal", (d, w) -> {
+                    try {
+                        String n = name.getText().toString().trim(); if (n.isEmpty()) throw new IllegalArgumentException();
+                        int kcal = calories.getText().toString().trim().isEmpty() ? 0 : (int) Math.round(Double.parseDouble(calories.getText().toString().trim()));
+                        double pp = parseDoubleOrZero(protein.getText().toString()); double cc = parseDoubleOrZero(carbs.getText().toString()); double ff = parseDoubleOrZero(fat.getText().toString());
+                        double multiplier = 1.0;
+                        if (servingInput != null) { double grams = Double.parseDouble(servingInput.getText().toString().trim()); if (grams <= 0 || grams > 3000) throw new IllegalArgumentException(); multiplier = grams / 100.0; }
+                        kcal = (int) Math.round(kcal * multiplier); pp *= multiplier; cc *= multiplier; ff *= multiplier;
+                        if (kcal < 0 || kcal > 10000 || pp < 0 || cc < 0 || ff < 0 || pp > 500 || cc > 1000 || ff > 500) throw new IllegalArgumentException();
+                        addMeal(n, kind, kcal, pp, cc, ff);
+                        renderPage();
+                    } catch (Exception e) { toast("Enter a name and reasonable nutrition values."); }
+                }).show();
+    }
+
+    private void addMeal(String name, String kind, int kcal, double protein, double carbs, double fat) {
+        JSONObject m = new JSONObject(); put(m, "id", id()); put(m, "name", name); put(m, "kind", kind); put(m, "calories", kcal);
+        put(m, "protein", protein); put(m, "carbs", carbs); put(m, "fat", fat); put(m, "time", System.currentTimeMillis()); put(m, "date", todayKey());
+        meals.put(m); saveState();
+    }
+
+    private void addRecipeMeal(String[] recipe) {
+        addMeal(recipe[0], recipe[1], Integer.parseInt(recipe[2]), Double.parseDouble(recipe[3]), Double.parseDouble(recipe[4]), Double.parseDouble(recipe[5]));
+        toast("Recipe added to today's food diary.");
+    }
+
+    private void showFoodPresets() {
+        String[] foods = {"Boiled egg · ~78 kcal", "Banana · ~105 kcal", "Apple · ~95 kcal", "Cooked rice, 100 g · ~130 kcal", "Cooked dal, 1 bowl · ~180 kcal", "Milk, 250 ml · ~150 kcal", "Plain oats, 40 g · ~150 kcal", "Cooked chickpeas, 100 g · ~164 kcal", "Tofu, 100 g · ~145 kcal", "Chicken breast, 100 g · ~165 kcal"};
+        int[] kcal = {78,105,95,130,180,150,150,164,145,165};
+        double[] pro = {6.3,1.3,0.5,2.7,10,8,5,8.9,17,31};
+        double[] carb = {0.6,27,25,28,30,12,27,27,3,0};
+        double[] fat = {5.3,0.4,0.3,0.3,3,8,3,2.6,8,3.6};
+        new AlertDialog.Builder(this).setTitle("Starter food list").setItems(foods, (d, which) -> {
+            JSONObject seed = new JSONObject(); put(seed, "name", foods[which].split(" · ")[0]); put(seed, "calories", kcal[which]); put(seed, "protein", pro[which]); put(seed, "carbs", carb[which]); put(seed, "fat", fat[which]);
+            showMealDialog("Food", seed);
+        }).show();
+    }
+
+    private void startBarcodeScan() {
+        IntentIntegrator integrator = new IntentIntegrator(this);
+        integrator.setPrompt("Scan a food product barcode");
+        integrator.setBeepEnabled(false);
+        integrator.setOrientationLocked(false);
+        integrator.setDesiredBarcodeFormats(IntentIntegrator.PRODUCT_CODE_TYPES);
+        integrator.initiateScan();
+    }
+
+    private void lookupBarcodeProduct(String barcode) {
+        toast("Looking up product information…");
+        background.execute(() -> {
+            JSONObject product = null;
+            String error = null;
+            HttpURLConnection connection = null;
+            try {
+                URL url = new URL("https://world.openfoodfacts.org/api/v2/product/" + URLEncoder.encode(barcode, "UTF-8") + ".json?fields=product_name,brands,nutriments");
+                connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("GET"); connection.setConnectTimeout(7000); connection.setReadTimeout(7000);
+                connection.setRequestProperty("User-Agent", "SuperMeAndroid/1.1 (Open Food Facts client)");
+                int code = connection.getResponseCode();
+                if (code < 200 || code >= 300) throw new IllegalStateException("Service returned " + code);
+                StringBuilder body = new StringBuilder();
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                    String line; while ((line = reader.readLine()) != null) body.append(line);
+                }
+                JSONObject response = new JSONObject(body.toString());
+                if (response.optInt("status", 0) != 1) throw new IllegalStateException("Product not found in the database.");
+                product = response.optJSONObject("product");
+                if (product == null) throw new IllegalStateException("No product details were returned.");
+            } catch (Exception e) { error = e.getMessage() == null ? "Lookup failed." : e.getMessage(); }
+            finally { if (connection != null) connection.disconnect(); }
+            JSONObject found = product; String fail = error;
+            runOnUiThread(() -> {
+                if (found == null) {
+                    new AlertDialog.Builder(this).setTitle("Product not found").setMessage("Barcode " + barcode + " could not be resolved. You can still log the item manually.\n\n" + fail)
+                            .setNegativeButton("Close", null).setPositiveButton("Enter manually", (d, w) -> showMealDialog("Scanned food", null)).show();
+                    return;
+                }
+                JSONObject nutrients = found.optJSONObject("nutriments"); if (nutrients == null) nutrients = new JSONObject();
+                double calories = getNutrient(nutrients, "energy-kcal_100g", "energy-kcal");
+                if (calories == 0) { double kj = getNutrient(nutrients, "energy-kj_100g", "energy-kj"); calories = kj / 4.184; }
+                JSONObject seed = new JSONObject();
+                String name = found.optString("product_name", "Scanned product");
+                if (found.has("brands") && !found.optString("brands").trim().isEmpty()) name += " · " + found.optString("brands");
+                put(seed, "name", name); put(seed, "calories", Math.round(calories));
+                put(seed, "protein", getNutrient(nutrients, "proteins_100g", "proteins"));
+                put(seed, "carbs", getNutrient(nutrients, "carbohydrates_100g", "carbohydrates"));
+                put(seed, "fat", getNutrient(nutrients, "fat_100g", "fat")); put(seed, "per100g", true);
+                new AlertDialog.Builder(this).setTitle("Product found").setMessage("Nutrition values from Open Food Facts are commonly per 100 g. Review the serving and values before logging.")
+                        .setNegativeButton("Cancel", null).setPositiveButton("Review & log", (d, w) -> showMealDialog("Scanned food", seed)).show();
+            });
+        });
+    }
+
+    private double getNutrient(JSONObject n, String primary, String fallback) {
+        double value = n.optDouble(primary, Double.NaN);
+        if (Double.isNaN(value)) value = n.optDouble(fallback, 0.0);
+        return Double.isNaN(value) || Double.isInfinite(value) || value < 0 ? 0 : value;
+    }
+
+    private void chooseFoodPhoto() {
+        foodReturnScreen = healthScreen;
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT); intent.setType("image/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
