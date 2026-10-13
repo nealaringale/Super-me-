@@ -1,0 +1,209 @@
+                .setNegativeButton("Keep", null).setPositiveButton("Delete", (d, w) -> {
+                    projects = removeById(projects, id); saveState(); renderPage();
+                }).show();
+    }
+
+    private void showLogTopicTimeDialog(JSONObject project, JSONObject task) {
+        LinearLayout form = formLayout();
+        EditText mins = field("25", "Minutes spent", InputType.TYPE_CLASS_NUMBER);
+        EditText label = field(task == null ? project.optString("name", "Study") : task.optString("title", "Topic"), "Session label", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        form.addView(mins); form.addView(label);
+        new AlertDialog.Builder(this).setTitle("Log time manually").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Save time", (d, w) -> {
+            int m;
+            try { m = Integer.parseInt(mins.getText().toString().trim()); }
+            catch (Exception e) { toast("Enter the minutes as a whole number."); return; }
+            if (m < 1 || m > 1440) { toast("Enter from 1 to 1440 minutes."); return; }
+            String text = label.getText().toString().trim();
+            logSession(text.isEmpty() ? "Study" : text, m * 60L, "MANUAL", project.optString("id"), task == null ? "" : task.optString("id"));
+            if (task != null) {
+                JSONArray items = project.optJSONArray("items");
+                JSONObject current = findById(items, task.optString("id"));
+                if (current != null) put(current, "seconds", current.optLong("seconds", 0L) + m * 60L);
+            }
+            saveState(); renderPage();
+        }).show();
+    }
+
+    private void showNamedSessionDialog() {
+        LinearLayout form = formLayout();
+        EditText label = field("Study session", "What are you working on?", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        EditText mins = field("25", "Optional session length in minutes", InputType.TYPE_CLASS_NUMBER);
+        form.addView(label); form.addView(mins);
+        new AlertDialog.Builder(this).setTitle("Start a named session").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Start", (d, w) -> {
+            String name = label.getText().toString().trim(); currentFocusLabel = name.isEmpty() ? "Study session" : name;
+            int m = 25;
+            try { if (!mins.getText().toString().trim().isEmpty()) m = Integer.parseInt(mins.getText().toString().trim()); }
+            catch (Exception ignored) { }
+            if (m < 1 || m > 240) { toast("Choose a session length between 1 and 240 minutes."); return; }
+            pomodoroMode = "FOCUS"; pomodoroDurationMs = m * MINUTE_MS; pomodoroRemainingMs = pomodoroDurationMs; pomodoroRunning = true; pomodoroEndsAtMs = System.currentTimeMillis() + pomodoroRemainingMs; focusSessionStartedAtMs = System.currentTimeMillis();
+            persistPomodoro(); studyScreen = "pomodoro"; renderPage();
+        }).show();
+    }
+
+    private void showManualSessionDialog() {
+        LinearLayout form = formLayout();
+        EditText label = field("Study session", "What did you work on?", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        EditText minutes = field("30", "Minutes", InputType.TYPE_CLASS_NUMBER);
+        form.addView(label); form.addView(minutes);
+        new AlertDialog.Builder(this).setTitle("Log a completed session").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Save", (d, w) -> {
+            int m;
+            try { m = Integer.parseInt(minutes.getText().toString().trim()); } catch (Exception e) { toast("Enter minutes as a number."); return; }
+            if (m < 1 || m > 1440) { toast("Enter from 1 to 1440 minutes."); return; }
+            String n = label.getText().toString().trim(); logSession(n.isEmpty() ? "Study session" : n, m * 60L, "MANUAL", "", "");
+            renderPage(); toast("Study time saved.");
+        }).show();
+    }
+
+    private void addPresetButton(LinearLayout parent, String label, int focus, int rest) {
+        Button b = button(label, SURFACE_2, TEXT, 11);
+        b.setOnClickListener(v -> {
+            if (focus == -1) {
+                LinearLayout form = formLayout();
+                EditText f = field("25", "Focus minutes", InputType.TYPE_CLASS_NUMBER);
+                EditText r = field("5", "Break minutes", InputType.TYPE_CLASS_NUMBER);
+                form.addView(f); form.addView(r);
+                new AlertDialog.Builder(this).setTitle("Custom focus timer").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Save", (d, w) -> {
+                    try {
+                        int fm = Integer.parseInt(f.getText().toString().trim()); int rm = Integer.parseInt(r.getText().toString().trim());
+                        if (fm < 1 || fm > 180 || rm < 1 || rm > 60) throw new IllegalArgumentException();
+                        prefs.edit().putInt("pomodoro_focus_mins", fm).putInt("pomodoro_break_mins", rm).apply();
+                        pomodoroMode = "FOCUS"; pomodoroDurationMs = fm * MINUTE_MS; pomodoroRemainingMs = pomodoroDurationMs; pomodoroRunning = false; persistPomodoro(); renderPage();
+                    } catch (Exception e) { toast("Focus: 1–180 minutes. Break: 1–60 minutes."); }
+                }).show();
+            } else {
+                prefs.edit().putInt("pomodoro_focus_mins", focus).putInt("pomodoro_break_mins", rest).apply();
+                if (pomodoroRunning) { toast("Pause the running timer before changing its length."); return; }
+                pomodoroMode = "FOCUS"; pomodoroDurationMs = focus * MINUTE_MS; pomodoroRemainingMs = pomodoroDurationMs; persistPomodoro(); renderPage();
+            }
+        });
+        parent.addView(b, weighted(1, 0, 3, 0, 0));
+    }
+
+    private void togglePomodoro() {
+        long now = System.currentTimeMillis();
+        if (pomodoroRunning) {
+            pomodoroRemainingMs = Math.max(0L, pomodoroEndsAtMs - now);
+            pomodoroRunning = false; pomodoroEndsAtMs = 0L;
+        } else {
+            if (pomodoroRemainingMs <= 0L) pomodoroRemainingMs = pomodoroDurationMs;
+            if ("FOCUS".equals(pomodoroMode) && focusSessionStartedAtMs == 0L) focusSessionStartedAtMs = now;
+            pomodoroEndsAtMs = now + pomodoroRemainingMs; pomodoroRunning = true;
+        }
+        persistPomodoro(); updateTimerLabels(); renderPageIfClockVisible();
+    }
+
+    private void resetPomodoro() {
+        pomodoroRunning = false; pomodoroEndsAtMs = 0L; pomodoroRemainingMs = pomodoroDurationMs;
+        if ("FOCUS".equals(pomodoroMode)) focusSessionStartedAtMs = 0L;
+        persistPomodoro(); renderPage();
+    }
+
+    private long currentPomodoroRemaining() {
+        return pomodoroRunning ? Math.max(0L, pomodoroEndsAtMs - System.currentTimeMillis()) : Math.max(0L, pomodoroRemainingMs);
+    }
+
+    private void tickPomodoro() {
+        if (!pomodoroRunning || System.currentTimeMillis() < pomodoroEndsAtMs) return;
+        long now = System.currentTimeMillis();
+        if ("FOCUS".equals(pomodoroMode)) {
+            long sec = Math.max(1L, (now - (focusSessionStartedAtMs > 0 ? focusSessionStartedAtMs : now)) / 1000L);
+            logSession(currentFocusLabel, sec, "POMODORO", "", "");
+            focusCycles++;
+            int breakMinutes = prefs.getInt("pomodoro_break_mins", 5);
+            int longBreak = 15;
+            pomodoroMode = focusCycles % 4 == 0 ? "LONG_BREAK" : "BREAK";
+            pomodoroDurationMs = (pomodoroMode.equals("LONG_BREAK") ? longBreak : breakMinutes) * MINUTE_MS;
+            toast("Focus block complete. Take a break.");
+        } else {
+            pomodoroMode = "FOCUS";
+            pomodoroDurationMs = prefs.getInt("pomodoro_focus_mins", 25) * MINUTE_MS;
+            toast("Break complete. Ready for another focus block?");
+        }
+        pomodoroRemainingMs = pomodoroDurationMs; pomodoroEndsAtMs = 0L; pomodoroRunning = false; focusSessionStartedAtMs = 0L;
+        persistPomodoro();
+        if ("STUDY".equals(tab) && "pomodoro".equals(studyScreen)) renderPage();
+    }
+
+    private void persistPomodoro() {
+        prefs.edit().putString("pomodoro_mode", pomodoroMode).putLong("pomodoro_duration", pomodoroDurationMs)
+                .putLong("pomodoro_remaining", pomodoroRemainingMs).putLong("pomodoro_ends_at", pomodoroEndsAtMs)
+                .putLong("focus_session_started", focusSessionStartedAtMs).putBoolean("pomodoro_running", pomodoroRunning)
+                .putInt("focus_cycles", focusCycles).putString("current_focus_label", currentFocusLabel).apply();
+    }
+
+    private void showFlashcardDialog() {
+        LinearLayout form = formLayout();
+        EditText deck = field("General", "Deck name", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        EditText q = field("", "Question / prompt", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        EditText a = field("", "Answer", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        form.addView(deck); form.addView(q); form.addView(a);
+        new AlertDialog.Builder(this).setTitle("Create flashcard").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Save card", (d, w) -> {
+            String question = q.getText().toString().trim(), answer = a.getText().toString().trim();
+            if (question.isEmpty() || answer.isEmpty()) { toast("A flashcard needs both a question and answer."); return; }
+            JSONObject f = new JSONObject(); put(f, "id", id()); put(f, "deck", deck.getText().toString().trim().isEmpty() ? "General" : deck.getText().toString().trim());
+            put(f, "question", question); put(f, "answer", answer); put(f, "due", System.currentTimeMillis()); put(f, "interval", 0); put(f, "repetitions", 0);
+            flashcards.put(f); saveState(); renderPage();
+        }).show();
+    }
+
+    private void startReview(String flashcardId) {
+        selectedFlashcardId = flashcardId;
+        JSONObject f = findById(flashcards, flashcardId);
+        if (f == null) { toast("Card not found."); return; }
+        LinearLayout view = vertical(); view.setPadding(dp(14), dp(5), dp(14), dp(5));
+        view.addView(text(f.optString("deck", "General"), 11, CYAN, true), margin(0, 0, 0, 8));
+        TextView question = text(f.optString("question", ""), 18, TEXT, true); view.addView(question, margin(0, 0, 0, 13));
+        TextView answer = text(f.optString("answer", ""), 15, GREEN, false); answer.setVisibility(View.GONE); view.addView(answer, margin(0, 0, 0, 12));
+        new AlertDialog.Builder(this).setTitle("Flashcard review").setView(view)
+                .setNeutralButton("Show answer", (d, w) -> showFlashcardRating(flashcardId))
+                .setNegativeButton("Close", null).show();
+    }
+
+    private void showFlashcardRating(String id) {
+        JSONObject f = findById(flashcards, id);
+        if (f == null) return;
+        new AlertDialog.Builder(this).setTitle(f.optString("question", "Question"))
+                .setMessage(f.optString("answer", ""))
+                .setItems(new String[]{"Again — review soon", "Good — normal interval", "Easy — longer interval"}, (dialog, which) -> {
+                    JSONObject live = findById(flashcards, id); if (live == null) return;
+                    int interval = live.optInt("interval", 0); int reps = live.optInt("repetitions", 0);
+                    if (which == 0) interval = 0;
+                    else if (which == 1) interval = interval == 0 ? 1 : Math.min(90, Math.max(1, interval * 2));
+                    else interval = interval == 0 ? 3 : Math.min(180, Math.max(3, interval * 3));
+                    put(live, "interval", interval); put(live, "repetitions", reps + 1); put(live, "due", System.currentTimeMillis() + (which == 0 ? 10 * MINUTE_MS : interval * 24L * HOUR_MS));
+                    saveState(); renderPage();
+                }).show();
+    }
+
+    private void showNoteDialog(JSONObject existing) {
+        boolean edit = existing != null;
+        LinearLayout form = formLayout();
+        EditText title = field(edit ? existing.optString("title", "") : "", "Title", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        EditText body = new EditText(this); body.setText(edit ? existing.optString("body", "") : ""); body.setHint("Write your note here…"); body.setTextColor(Color.BLACK); body.setHintTextColor(Color.GRAY); body.setTextSize(14); body.setGravity(Gravity.TOP); body.setMinLines(5); body.setPadding(dp(12), dp(10), dp(12), dp(10));
+        form.addView(title); form.addView(body);
+        new AlertDialog.Builder(this).setTitle(edit ? "Edit note" : "New note").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Save", (d, w) -> {
+            String t = title.getText().toString().trim(); String b = body.getText().toString().trim();
+            if (t.isEmpty() && b.isEmpty()) { toast("Write a title or note first."); return; }
+            JSONObject note = edit ? existing : new JSONObject();
+            if (!edit) put(note, "id", id()); put(note, "title", t.isEmpty() ? "Untitled note" : t); put(note, "body", b); put(note, "updated", System.currentTimeMillis());
+            if (!edit) notes.put(note); saveState(); renderPage();
+        }).show();
+    }
+
+    private void renderSessionList(LinearLayout parent, String dateFilter) {
+        boolean any = false;
+        for (int i = sessions.length() - 1; i >= 0; i--) {
+            JSONObject s = sessions.optJSONObject(i);
+            if (s == null) continue;
+            if (dateFilter != null && !dateFilter.equals(s.optString("date"))) continue;
+            any = true;
+            LinearLayout box = card();
+            box.addView(text(s.optString("label", "Study session"), 14, TEXT, true), margin(0, 0, 0, 4));
+            box.addView(text(formatDuration(s.optLong("seconds", 0L)) + " · " + dateText(s.optLong("end", s.optLong("start", 0L))) + " · " + s.optString("type", "SESSION"), 11, MUTED, false));
+            parent.addView(box, margin(0, 0, 0, 7));
+        }
+        if (!any) parent.addView(text(dateFilter == null ? "No focus sessions yet. Start a timer or log time manually." : "No sessions logged today yet.", 12, MUTED, false));
+    }
+
+    private void shareProject(JSONObject project) {
+        JSONArray items = project.optJSONArray("items");
